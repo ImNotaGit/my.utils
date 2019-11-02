@@ -1,0 +1,19 @@
+Package: my.utils
+Type: Package
+Title: My Own Convenient Functions
+Version: 0.1.0
+Author: Kuoyuan Cheng
+Maintainer: Kuoyuan Cheng <yourself@somewhere.net>
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Depends:
+    data.table,
+    stringr,
+    ggplot2
+Imports:
+    sva,
+    affy,
+    limma
