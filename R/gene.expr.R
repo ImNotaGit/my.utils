@@ -86,7 +86,7 @@ de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE) {
   design <- model.matrix(as.formula(model), pheno)
   fit <- limma::lmFit(mat, design)
   fit <- limma::eBayes(fit, robust=robust, trend=trend)
-  res <- as.data.table(topTable(fit, coef=coef, number=Inf, genelist=rownames(mat)))
+  res <- as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=rownames(mat)))
   setnames(res, c("id","log.fc","ave.expr","t","pval","padj","B"))
   res
 }
