@@ -3,13 +3,15 @@
 
 hh <- function(x, nr=5, nc=nr) {
   # check the first nr rows and nc columns of a matrix-like object
+  if (nr>nrow(x)) nr <- nrow(x)
+  if (nc>ncol(x)) nc <- ncol(x)
   x[1:nr, 1:nc]
 }
 
 
 write.tab <- function(x, file, append=FALSE, col.names=TRUE) {
   # write a tsv file w/o quotation and w/o row names, but by default with col names
-  write.table(x, file=file, append=append, quote=FALSE, sep="\t", row.names=FALSE, col.names=col.names)
+  fwrite(x, file=file, append=append, quote=FALSE, sep="\t", na="NA", col.names=col.names)
 }
 
 
