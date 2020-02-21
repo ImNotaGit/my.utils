@@ -90,7 +90,7 @@ wilcox <- function(arg1, arg2=NULL, ...) {
     more.args <- list(...)
     if (is.null(more.args$paired) || more.args$paired==FALSE) {
       # effect size for unpaired test: use the rank-biserial correlation (cf. wikipedia). this value is between -1 and +1. positive wilcox.r means s2 larger than s1.
-      wilcox.r <- unname(1 - 2 * wilcox.res$statistic / (length(s1)*length(s2)))
+      wilcox.r <- unname(1 - 2 * wilcox.res$statistic / (sum(!is.na(s1))*sum(!is.na(s2))))
     } else if (more.args$paired) {
       ranksum.pos <- wilcox.res$statistic
       nr <- sum(s1!=s2, na.rm=TRUE)
