@@ -18,3 +18,4 @@ Imports:
     sva,
     affy,
     limma,
+    fgsea

@@ -308,3 +308,11 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
   res
 }
 
+
+gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
+  x <- dat[[x]]
+  names(x) <- dat[[id]]
+  set.seed(seed)
+  res <- fgsea::fgsea(pathways=gsets, stats=x, nperm=1e4, ...)
+  res[order(padj,pval)]
+}
