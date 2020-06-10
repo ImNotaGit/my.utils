@@ -285,9 +285,10 @@ class.enrich.pval <- function(tab.qset, tab.uset, class.name) {
 }
 
 
-enrich.gsets <- function(fg, gsets, bg, overlap.gene.cnt.cutoff=0, padj.cutoff=1.1) {
+enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1) {
   # the over-representation type of enrichment test (with Fisher's exact test here.)
-  # fg: query genes; gsets: gene sets as a list object; bg: background genes; overlap.gene.cnt.cutoff: only select those gene sets with >this value overlap with fg genes; padj.cutoff: fdr threshold.
+  # fg: query genes; gsets: gene sets as a list object; bg: background genes; overlap.cutoff: only select those gene sets with >this value overlap with fg genes; padj.cutoff: fdr threshold.
+  # nc: number of cores
 
   enrich.gset0 <- function(fg, gset, bg) {
     if (length(fg)==0) {
@@ -295,15 +296,15 @@ enrich.gsets <- function(fg, gsets, bg, overlap.gene.cnt.cutoff=0, padj.cutoff=1
       return(NULL)
     }
     res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater")
-    data.table(overlap.gene.cnt=res$table[1,1], gset.gene.cnt=res$table[3,1], odds.ratio=res$estimate, pval=res$p.value, overlap.genes=list(unique(intersect(fg, gset))))
+    data.table(overlap.size=res$table[1,1], gene.set.size=res$table[1,1]+res$table[2,1], odds.ratio=res$estimate, pval=res$p.value, overlap.genes=list(unique(intersect(intersect(fg, gset),bg))))
   }
-  res <- lapply(gsets, enrich.gset0, fg=fg, bg=bg)
+  res <- mclapply(gsets, enrich.gset0, fg=fg, bg=bg, mc.cores=nc)
   res <- rbindlist(res, idcol="gene.set")
   if (ncol(res)==0) return(NULL)
-  res <- res[overlap.gene.cnt>overlap.gene.cnt.cutoff]
-  res[, padj:=p.adjust(p, method="BH")]
+  res <- res[overlap.size>overlap.cutoff]
+  res[, padj:=p.adjust(pval, method="BH")]
   res <- res[order(padj,pval)][padj<padj.cutoff]
-  setcolorder(res, c("gene.set","odds.ratio","pval","padj","gset.gene.cnt","overlap.gene.cnt","overlap.genes"))
+  setcolorder(res, c("gene.set","odds.ratio","pval","padj","gene.set.size","overlap.size","overlap.genes"))
   res
 }
 

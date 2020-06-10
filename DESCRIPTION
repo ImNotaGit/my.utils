@@ -12,8 +12,9 @@ LazyData: true
 Depends:
     data.table,
     stringr,
+    parallel,
     ggplot2
 Imports:
     sva,
     affy,
-    limma
+    limma,
