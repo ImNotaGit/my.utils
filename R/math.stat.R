@@ -173,11 +173,9 @@ make.confus.mat <- function(qset, refset, uset, margins=TRUE) {
   if (length(qset)==0) {
     warning("In make.confus.mat: qset has zero length. NA returned.\n")
     return(NA)
-  } else if (length(qset)==1) {
-    if (is.na(qset)) {
-      warning("In make.confus.mat: qset is NA. NA returned.\n")
-      return(NA)
-    }
+  } else if (length(qset)==1 && is.na(qset)) {
+    warning("In make.confus.mat: qset is NA. NA returned.\n")
+    return(NA)
   }
   # make sure uset has unique items
   uset <- unique(uset)
@@ -203,11 +201,9 @@ confus.mat.quant <- function(..., index="tpr") {
   if (length(x[[1]])==0) {
     warning("In confus.mat.quant: first argument has zero length. NA returned.\n")
     return(NA)
-  } else if (length(x[[1]])==1) {
-    if (is.na(x[[1]])) {
-      warning("In confus.mat.quant: first argument is NA. NA returned.\n")
-      return(NA)
-    }
+  } else if (length(x[[1]])==1 && is.na(x[[1]])) {
+    warning("In confus.mat.quant: first argument is NA. NA returned.\n")
+    return(NA)
   }
   if (is.matrix(x[[1]])) {
     conf <- addmargins(x[[1]][1:2, 1:2])
@@ -258,58 +254,19 @@ confus.mat.quant <- function(..., index="tpr") {
 }
 
 
-enrich.test <- function(qset=NULL, refset=NULL, uset=NULL, margins=TRUE, ..., confus.mat) {
+enrich.test <- function(qset=NULL, refset=NULL, uset=NULL, confus.mat=NULL, ...) {
 
   # Fisher's exact test of enrichment of a reference set (or actual positive set, refset) in a query set (or predicted positive set, qset), with the background being the universal set (uset), or from a given confusion matrix as confus.mat.
-  # note that the argument confus.mat is forced as a named argument. If want to calculate with qset, refset and uset rather than a confusion matrix, explicitly set confus.mat=anything other than a matrix (but not NA)
+  # ... passed to fisher.test()
 
-  # if confus.mat is NA, return NA
-  if (length(confus.mat)==1) {
-    if (is.na(confus.mat)) {
-      warning("In enrich.test: confus.mat is NA. NA returned.\n")
-      return(NA)
-    }
-  }
-  # if confus.mat is given as a matrix, assume it is the confusion matrix in the standard form as returned by make.confus.mat; otherwise run make.confus.mat, but when qset is empty or NA, return NA
-  if (is.matrix(confus.mat)) {
-    conf <- confus.mat[1:2, 1:2]
-  } else {
-    if (length(qset)==0) {
-      warning("In enrich.test: qset has zero length. NA returned.\n")
-      return(NA)
-    } else if (length(qset)==1) {
-      if (is.na(qset)) {
-        warning("In enrich.test: qset is NA. NA returned.\n")
-        return(NA)
-      }
-    }
-    if (is.vector(qset) && is.vector(refset) && is.vector(uset)) {
-      conf <- make.confus.mat(qset, refset, uset, margins=FALSE)
-    } else stop("In function enrich.test: arguments not given as appropriate.\n")
-  }
+  if (is.null(confus.mat)) {
+    conf <- make.confus.mat(qset, refset, uset, margins=FALSE)
+  } else conf <- confus.mat[1:2, 1:2]
 
   # fisher's exact test
   res <- fisher.test(conf, ...)
-  # add the confusion matrix to the test result
-  if (margins) conf <- addmargins(conf)
   res$table <- conf
   return(res)
-}
-
-
-enrich.pval <- function(...) {
-  # get the enrichment test p value
-  l <- list(...)
-  if (length(l[[1]])==0) {
-    warning("In enrich.pval: the first argument has zero length. NA returned.\n")
-    return(NA)
-  } else if (length(l[[1]])==1) {
-    if (is.na(l[[1]])) {
-      warning("In enrich.pval: the first argument is NA. NA returned.\n")
-      return(NA)
-    }
-  }
-  enrich.test(...)$p.value
 }
 
 
@@ -324,7 +281,7 @@ class.enrich.pval <- function(tab.qset, tab.uset, class.name) {
   tn <- n - fp
   # confusion matrix
   conf <- matrix(c(tp,fn,fp,tn),2)
-  enrich.pval(confus.mat=conf)
+  enrich.test(confus.mat=conf)$p.value
 }
 
 
@@ -337,14 +294,16 @@ enrich.gsets <- function(fg, gsets, bg, overlap.gene.cnt.cutoff=0, padj.cutoff=1
       warning("The number of query genes is zero, NULL returned.\n")
       return(NULL)
     }
-    res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater", confus.mat=NULL)
-    data.table(overlap.gene.cnt=res$table[1,1], gset.gene.cnt=res$table[3,1], odds.ratio=res$estimate, p=res$p.value)
+    res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater")
+    data.table(overlap.gene.cnt=res$table[1,1], gset.gene.cnt=res$table[3,1], odds.ratio=res$estimate, pval=res$p.value, overlap.genes=list(unique(intersect(fg, gset))))
   }
   res <- lapply(gsets, enrich.gset0, fg=fg, bg=bg)
   res <- rbindlist(res, idcol="gene.set")
   if (ncol(res)==0) return(NULL)
   res <- res[overlap.gene.cnt>overlap.gene.cnt.cutoff]
-  res[, p.adj:=p.adjust(p, method="BH")]
-  res[order(p)][p.adj<padj.cutoff]
+  res[, padj:=p.adjust(p, method="BH")]
+  res <- res[order(padj,pval)][padj<padj.cutoff]
+  setcolorder(res, c("gene.set","odds.ratio","pval","padj","gset.gene.cnt","overlap.gene.cnt","overlap.genes"))
+  res
 }
 

@@ -70,32 +70,30 @@ prep.data <- function(dat, log="default", norm.method="loess") {
 }
 
 
-de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE) {
+de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE, gene.colname=NULL) {
   # differential expression analysis
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
   # pheno: phenotypic data as a data.frame with the same order of samples
   # model: the linear model to use for DE, by default a linear model containing all variables in pheno
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
-  # robust, trend: parameters for limma eBayes, set to TRUE for log-transformed RNA-seq data
+  # robust, trend: parameters for limma eBayes, set to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods is recommended)
+  # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if NULL will try to get gene symbols automatically
 
   if (class(dat)=="ExpressionSet") {
     mat <- exprs(dat)
-    rownames(mat) <- fData(dat)$Gene.symbol
+    if (is.null(gene.colname)) {
+      idx <- which(tolower(names(fData(dat))) %in% c("gene.symbol","gene_symbol","gene symbol","symbol","orf"))
+      if (length(idx)!=1) stop("Issue with gene symbols, please check.")
+    } else idx <- gene.colname
+    rownames(mat) <- fData(dat)[[idx]]
   } else if (is.matrix(dat)) mat <- dat
 
   design <- model.matrix(as.formula(model), pheno)
   fit <- limma::lmFit(mat, design)
   fit <- limma::eBayes(fit, robust=robust, trend=trend)
-  res <- tryCatch({
-    tt <- as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=rownames(mat)))
-    setnames(tt, c("id","log.fc","ave.expr","t","pval","padj","B"))
-    tt
-  }, error=function(e) {
-    tt <- as.data.table(limma::topTable(fit, coef=coef, number=Inf))
-    setnames(tt, c("id","log.fc","ave.expr","t","pval","padj","B"))
-    tt
-  })
-
+  res <- tryCatch(as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=rownames(mat))),
+                  error=function(e) as.data.table(limma::topTable(fit, coef=coef, number=Inf)))
+  setnames(res, c("id","log.fc","ave.expr","t","pval","padj","B"))
   res
 }
 
