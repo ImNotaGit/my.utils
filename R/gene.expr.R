@@ -93,7 +93,11 @@ de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE, gene.col
   fit <- limma::eBayes(fit, robust=robust, trend=trend)
   res <- tryCatch(as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=rownames(mat))),
                   error=function(e) as.data.table(limma::topTable(fit, coef=coef, number=Inf)))
-  setnames(res, c("id","log.fc","ave.expr","t","pval","padj","B"))
+  setnames(res, "ID", "id")
+  setnames(res, "logFC", "log.fc")
+  setnames(res, "AveExpr", "ave.expr")
+  setnames(res, "P.Value", "pval")
+  setnames(res, "adj.P.Val", "padj")
   res
 }
 
