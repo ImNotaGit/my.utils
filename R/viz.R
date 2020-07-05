@@ -1,5 +1,24 @@
 ## ----functions for quick data exploration and visualization----
 
+plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, label=NULL, center=TRUE, scale=TRUE, ...) {
+  # PCA plot, given a matrix mat of sample-by-variable
+  # pc.x and pc.y: PC's to plot on the x any y axes
+  # color, shape, label: vectors corresponding to the samples (rows of mat) for plotting
+  # center, scale, ...: passed to prcomp()
+
+  res <- prcomp(mat, center=center, scale.=scale, ...)
+  tot.var <- sum(res$sdev^2)
+  varx <- sprintf("PC %d (%.2f%%)", pc.x, res$sdev[pc.x]^2 /tot.var*100)
+  vary <- sprintf("PC %d (%.2f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
+
+  p <- qplot(res$x[, pc.x], res$x[, pc.y], xlab=varx, ylab=vary,
+    color=color, shape=shape) + theme_classic()
+
+  if (!is.null(label)) p <- p + geom_text_repel(label=label)
+
+  return(p)
+}
+
 
 cp.groups <- function(..., ylab="Value", more.args=list()) {
 
@@ -158,7 +177,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL) {
 }
 
 
-scatter.plot <- function(x, y, trend="lm", cor.method="pearson", xlab=deparse(substitute(x)), ylab=deparse(substitute(y))) {
+plot.xy <- function(x, y, trend="lm", cor.method="pearson", xlab=deparse(substitute(x)), ylab=deparse(substitute(y))) {
 
   q <- qplot(x=x, y=y, xlab=xlab, ylab=ylab) + theme_classic()
   if ("lm" %in% trend) {

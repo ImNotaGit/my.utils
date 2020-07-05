@@ -13,9 +13,13 @@ Depends:
     data.table,
     stringr,
     parallel,
-    ggplot2
+    ggplot2,
+    ggrepel,
+    survival
 Imports:
     sva,
     affy,
     limma,
+    edgeR,
+    DESeq2,
     fgsea
