@@ -6,6 +6,15 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, label=NULL, ce
   # color, shape, label: vectors corresponding to the samples (rows of mat) for plotting
   # center, scale, ...: passed to prcomp()
 
+  if (scale) {
+    id <- apply(mat, 2, uniqueN)==1
+    s <- sum(id)
+    if (s!=0) {
+      message(sprintf("removed %d columns of zero variance.", s))
+      mat <- mat[, !id]
+    }
+  }
+
   res <- prcomp(mat, center=center, scale.=scale, ...)
   tot.var <- sum(res$sdev^2)
   varx <- sprintf("PC %d (%.2f%%)", pc.x, res$sdev[pc.x]^2 /tot.var*100)
@@ -219,6 +228,24 @@ plot.pair.corrs <- function(datx, daty, xlab, ylab) {
     geom_text(data=lmres, aes(x=x, y=y, label=txt), size=4) +
     theme_classic() +
     theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), axis.title.y=element_text(size=12), axis.text.y=element_text(size=10), legend.position="bottom")
+  return(p)
+}
+
+
+plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="overlap.size", xlab=NULL) {
+  dat <- dat[order(get(x))]
+  dat[, c(y):=factor(get(y), levels=get(y))]
+  if (is.null(xlab)) xlab <- x
+  p <- ggplot(dat, aes(x=get(x), y=get(y))) +
+    xlab(xlab) +
+    theme_classic() +
+    theme(axis.title.y=element_blank(),
+          axis.text.y=element_text(size=10),
+          axis.title.x=element_text(size=12))
+  if (!is.null(color) && is.null(size)) p <- p + geom_point(aes(color=get(color))) + scale_color_continuous(low="red3", high="grey", name=color, guide=guide_colorbar(reverse=TRUE))
+  if (!is.null(size) && is.null(color)) p <- p + geom_point(aes(size=get(size))) + scale_size_continuous(name=size)
+  if (!is.null(color) && !is.null(size)) p <- p + geom_point(aes(color=get(color), size=get(size))) + scale_color_continuous(low="red3", high="grey", name=color, guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(name=size)
+
   return(p)
 }
 
