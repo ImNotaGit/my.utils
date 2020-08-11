@@ -24,7 +24,7 @@ rm.batch.eff <- function(...) {
 
 
 prep.data <- function(dat, log="default", norm.method="loess") {
-  # prepare expression data: transformation, normalization, etc.
+  # prepare microarray gene expression data: transformation, normalization, etc.
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
   # log: whether to log2(x+1) data; "default" automatically determines whether to transform
   # norm.method: either "loess" or "quantile"; "loess" won't work if the data contains NA
@@ -44,23 +44,24 @@ prep.data <- function(dat, log="default", norm.method="loess") {
   if (log) {
     nlt0 <- sum(mat<0, na.rm=TRUE)
     if (nlt0>0) {
-      warning(sprintf("Log-transformation error: there are %d negative values in the data, the data may be already on log-scale.\nHere is a summary of the data:\n", nlt0))
-      print(summary(as.vector(mat)))
-      stop()
+      mat[mat<0] <- 0
+      warning("There are ",nlt0," negative values in the data, these are set to 0 for log-transformation.")
     }
     mat <- log2(mat+1)
-    cat("log2-transformation performed.\n")
-  } else cat("log2-transformation NOT performed.\n")
+    message("log2-transformation performed.")
+  } else message("log2-transformation NOT performed.")
 
   # normalization
   if (norm.method=="loess") {
     nna <- sum(is.na(mat))
     if (nna>0) {
-      stop(sprintf("Loess normalization error: there are %d NA/NaN's in the data.\n", nna))
-    } else mat <- affy::normalize.loess(mat, log.it=FALSE)
+      mat[is.na(mat)] <- 0
+      warning("There are ",nna," NA/NaN's in the data, these are set to 0 for loess normalization.")
+    }
+    mat <- affy::normalize.loess(mat, log.it=FALSE)
   } else if (norm.method=="quantile") {
     mat <- limma::normalizeQuantiles(mat)
-  } else cat("Normalization NOT performed.\n")
+  } else message("Normalization NOT performed.")
 
   # return
   if (class(dat)=="ExpressionSet") {
@@ -70,34 +71,87 @@ prep.data <- function(dat, log="default", norm.method="loess") {
 }
 
 
-de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE, gene.colname=NULL) {
-  # differential expression analysis
+de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
+  # differential expression analysis with limma
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
   # pheno: phenotypic data as a data.frame with the same order of samples
-  # model: the linear model to use for DE, by default a linear model containing all variables in pheno
+  # model: the linear model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
   # robust, trend: parameters for limma eBayes, set to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods is recommended)
-  # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if NULL will try to get gene symbols automatically
+  # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if TRUE then will try to get gene symbols automatically from fData(dat); if FALSE then will not try to get gene symbols; gene symbols will be added to the returned DE table
 
   if (class(dat)=="ExpressionSet") {
     mat <- exprs(dat)
-    if (is.null(gene.colname)) {
-      idx <- which(tolower(names(fData(dat))) %in% c("gene.symbol","gene_symbol","gene symbol","symbol","orf"))
-      if (length(idx)!=1) stop("Issue with gene symbols, please check.")
-    } else idx <- gene.colname
-    rownames(mat) <- fData(dat)[[idx]]
+    if (!isFALSE(gene.colname)) {
+      if (is.character(gene.colname)) {
+      	if (!gene.colname %in% names(fData(dat))) stop("`",gene.colname,"` not in fData(dat).") else idx <- gene.colname
+      } else {
+        idx <- which(tolower(names(fData(dat))) %in% c("gene.symbol","gene_symbol","gene symbol","symbol","orf"))
+        if (length(idx)==0) stop("Gene symbol annotation not found in fData(dat), please check.")
+        idx <- idx[1]
+        message("Used the column `",names(fData(dat))[idx],"` in fData(dat) as gene symbols.")
+      }
+      gns <- fData(dat)[[idx]]
+    } else gns <- rownames(mat)
   } else if (is.matrix(dat)) mat <- dat
 
   design <- model.matrix(as.formula(model), pheno)
   fit <- limma::lmFit(mat, design)
   fit <- limma::eBayes(fit, robust=robust, trend=trend)
-  res <- tryCatch(as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=rownames(mat))),
+  res <- tryCatch(as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=gns)),
                   error=function(e) as.data.table(limma::topTable(fit, coef=coef, number=Inf)))
   setnames(res, "ID", "id")
   setnames(res, "logFC", "log.fc")
   setnames(res, "AveExpr", "ave.expr")
   setnames(res, "P.Value", "pval")
   setnames(res, "adj.P.Val", "padj")
+  res
+}
+
+
+rm.low.genes <- function(dat, rm.low.frac.gt=0.5, count.cutoff=10) {
+  # remove genes with low count
+  # dat: gene-by-sample expression matrix of raw counts
+
+  tot.cnts <- colSums(dat)
+  cutoff <- count.cutoff/median(tot.cnts)*1e6
+  dat1 <- cpm(dat, lib.size=tot.cnts)
+  keep <- rowMeans(dat1<cutoff) <= rm.low.frac.gt
+  message(sum(keep), " rows (genes/transcripts) remaining.")
+  dat[keep, ]
+}
+
+
+get.tmm.log.cpm <- function(dat) {
+  # get log2(cpm+1) values with edgeR (TMM-normalized), from raw counts
+  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+
+  dge <- edgeR::DGEList(counts=dat)
+  dge <- calcNormFactors(dge)
+  cpm(dge, log=TRUE, prior.count=1)
+}
+
+
+de.edger <- function(dat, pheno, model="~.", coef, lfc.cutoff=0) {
+  # differential expression analysis with edgeR
+  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+  # pheno: phenotypic data as a data.frame with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
+
+  dge <- DGEList(counts=dat)
+  dge <- calcNormFactors(dge)
+  design <- model.matrix(as.formula(model), pheno)
+  dge <- estimateDisp(dge, design)
+
+  fit <- glmQLFit(dge, design)
+  if (lfc.cutoff==0) test.res <- glmQLFTest(fit, coef=coef) else test.res <- glmTreat(fit, coef=coef, lfc=lfc.cutoff)
+  res <- topTags(test.res, n=Inf)[[1]]
+  res <- cbind(id=row.names(res), as.data.table(res))
+  setnames(res, "logFC", "log.fc")
+  setnames(res, "logCPM", "log.cpm")
+  setnames(res, "PValue", "pval")
+  setnames(res, "FDR", "padj")
   res
 }
 

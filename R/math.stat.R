@@ -3,7 +3,7 @@
 
 jaccard <- function(a, b) {
   # jaccard index between two sets
-  length(intersect(a, b)) / length(union(a, b))
+  uniqueN(intersect(a, b)) / uniqueN(union(a, b))
 }
 
 
@@ -100,10 +100,10 @@ wilcox <- function(arg1, arg2=NULL, ...) {
     }
 
     # return
-    c(r.wilcox=wilcox.r, pval.wilcox=wilcox.p)
+    data.table(r.wilcox=wilcox.r, pval=wilcox.p)
 
   }, error=function(e) {
-    c(r.wilcox=NA, pval.wilcox=NA)
+    data.table(r.wilcox=NA, pval=NA)
   })
 
 }
@@ -145,7 +145,7 @@ wilcox3 <- function(arg1, arg2=NULL, arg3=NULL, ...) {
   } else lab <- c("12", "23", "13")
   res <- as.data.table(rbind(w12, w23, w13))
   res[, compare:=lab]
-  setcolorder(res, c("compare", "r.wilcox", "pval.wilcox"))
+  setcolorder(res, c("compare", "r.wilcox", "pval"))
   return(res)
 }
 
@@ -310,9 +310,35 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
 
 
 gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
+  # GSEA analysis given a data.frame/data.table, x is the column name of the value, id is the column name of the label of x, gsets is a list of gene sets
+  # ... is passed to fgsea::fgsea
+
   x <- dat[[x]]
   names(x) <- dat[[id]]
   set.seed(seed)
   res <- fgsea::fgsea(pathways=gsets, stats=x, nperm=1e4, ...)
   res[order(padj,pval)]
 }
+
+
+# to do
+#cor.all <- function(y, x, ..., dat=NULL, f=NULL, method=c("default","spearman","pearson","lm","olr","fisher","chisq","km","cox")) {
+#  # correlate y and x automatically with appropriate methods depending on their type, unless method is specified
+#  # y and x can be discrete or continuous or ordinal, in addition y can be a Surv() object; pass additional variables to be controlled for separately or as a list or data.table in ...
+#  # or pass a data.table to dat,
+#  # return a list(output, summary), output is the raw output from whatever statistical test used; summary is a data.table(estimate, pval)
+#
+#  method <- match.arg(method)
+#
+#  z <- list(...)
+#  if (is.null(dat))
+#
+#  if (method=="default") {
+#    is.y.cont <- is.numeric(y)
+#    is.y.surv <- is.Surv(y)
+#    is.x.cont <- is.numeric(x)
+#    z <- list(...)
+#
+#  }
+#
+#}
