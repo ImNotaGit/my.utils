@@ -71,7 +71,7 @@ prep.data <- function(dat, log="default", norm.method="loess") {
 }
 
 
-de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
+de <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
   # differential expression analysis with limma
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
   # pheno: phenotypic data as a data.frame with the same order of samples
@@ -95,7 +95,13 @@ de <- function(dat, pheno, model="~.", coef, robust=FALSE, trend=FALSE, gene.col
     } else gns <- rownames(mat)
   } else if (is.matrix(dat)) mat <- dat
 
-  design <- model.matrix(as.formula(model), pheno)
+  #vs <- all.vars(model)
+  vs <- names(model.frame(model, pheno))
+  ccs <- complete.cases(pheno[, vs, with=FALSE])
+  if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+  mat <- mat[, ccs]
+  phe <- pheno[ccs]
+  design <- model.matrix(model, phe)
   fit <- limma::lmFit(mat, design)
   fit <- limma::eBayes(fit, robust=robust, trend=trend)
   res <- tryCatch(as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=gns)),
@@ -132,16 +138,22 @@ get.tmm.log.cpm <- function(dat) {
 }
 
 
-de.edger <- function(dat, pheno, model="~.", coef, lfc.cutoff=0) {
+de.edger <- function(dat, pheno, model=~., coef, lfc.cutoff=0) {
   # differential expression analysis with edgeR
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.frame with the same order of samples
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
 
+  #vs <- all.vars(model)
+  vs <- names(model.frame(model, pheno))
+  ccs <- complete.cases(pheno[, vs, with=FALSE])
+  if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+  dat <- dat[, ccs]
+  phe <- pheno[ccs]
+  design <- model.matrix(model, phe)
   dge <- edgeR::DGEList(counts=dat)
   dge <- edgeR::calcNormFactors(dge)
-  design <- model.matrix(as.formula(model), pheno)
   dge <- edgeR::estimateDisp(dge, design)
 
   fit <- edgeR::glmQLFit(dge, design)
