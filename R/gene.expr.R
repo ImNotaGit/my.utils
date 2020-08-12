@@ -115,7 +115,7 @@ rm.low.genes <- function(dat, rm.low.frac.gt=0.5, count.cutoff=10) {
 
   tot.cnts <- colSums(dat)
   cutoff <- count.cutoff/median(tot.cnts)*1e6
-  dat1 <- cpm(dat, lib.size=tot.cnts)
+  dat1 <- edgeR::cpm(dat, lib.size=tot.cnts)
   keep <- rowMeans(dat1<cutoff) <= rm.low.frac.gt
   message(sum(keep), " rows (genes/transcripts) remaining.")
   dat[keep, ]
@@ -127,8 +127,8 @@ get.tmm.log.cpm <- function(dat) {
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
 
   dge <- edgeR::DGEList(counts=dat)
-  dge <- calcNormFactors(dge)
-  cpm(dge, log=TRUE, prior.count=1)
+  dge <- edgeR::calcNormFactors(dge)
+  edgeR::cpm(dge, log=TRUE, prior.count=1)
 }
 
 
@@ -139,14 +139,14 @@ de.edger <- function(dat, pheno, model="~.", coef, lfc.cutoff=0) {
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
 
-  dge <- DGEList(counts=dat)
-  dge <- calcNormFactors(dge)
+  dge <- edgeR::DGEList(counts=dat)
+  dge <- edgeR::calcNormFactors(dge)
   design <- model.matrix(as.formula(model), pheno)
-  dge <- estimateDisp(dge, design)
+  dge <- edgeR::estimateDisp(dge, design)
 
-  fit <- glmQLFit(dge, design)
-  if (lfc.cutoff==0) test.res <- glmQLFTest(fit, coef=coef) else test.res <- glmTreat(fit, coef=coef, lfc=lfc.cutoff)
-  res <- topTags(test.res, n=Inf)[[1]]
+  fit <- edgeR::glmQLFit(dge, design)
+  if (lfc.cutoff==0) test.res <- edgeR::glmQLFTest(fit, coef=coef) else test.res <- edgeR::glmTreat(fit, coef=coef, lfc=lfc.cutoff)
+  res <- edgeR::topTags(test.res, n=Inf)[[1]]
   res <- cbind(id=row.names(res), as.data.table(res))
   setnames(res, "logFC", "log.fc")
   setnames(res, "logCPM", "log.cpm")
