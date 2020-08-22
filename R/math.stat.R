@@ -321,6 +321,46 @@ gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
 }
 
 
+run.lm <- function(dat, model = y ~ x*z, coef="x", ..., keep.fit=FALSE) {
+  # perform a linear regression (wrapper around lm)
+  # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
+  # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lm() can also be provided here, so need to be careful to avoid any name conflicts
+  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+
+  tmp <- list(...)
+  args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(lm))])
+
+  tryCatch({
+    fit <- do.call(lm, args)
+    tmp <- coef(summary(fit))
+    res <- data.table(coef=tmp[coef, "Estimate"], pval=tmp[coef, "Pr(>|t|)"])
+    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
+  }, error=function(e) {
+    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(coef=NA, pval=NA)
+  })
+}
+
+
+run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata(gender) + cluster(id), coef="x", ..., keep.fit=FALSE) {
+  # perform a Cox regression (wrapper around coxph)
+  # dat: a data.table containing covariates; model: formula for Cox regression; coef: for which variable/term should the Cox regression coefficient and Wald test p value be returned; the default values are intended to be an example
+  # ...: additional variables to be used for fitting the Cox model, if they appear in the model formula and are not in dat; additional arguments to coxph() can also be provided here, so need to be careful to avoid any name conflicts
+  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+
+  tmp <- list(...)
+  args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(coxph))])
+
+  tryCatch({
+    fit <- do.call(coxph, args)
+    tmp <- coef(summary(fit))
+    res <- data.table(coef=tmp[coef, "coef"], pval=tmp[coef, "Pr(>|z|)"])
+    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
+  }, error=function(e) {
+    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(coef=NA, pval=NA)
+  })
+}
+
+
 # to do
 #cor.all <- function(y, x, ..., dat=NULL, f=NULL, method=c("default","spearman","pearson","lm","olr","fisher","chisq","km","cox")) {
 #  # correlate y and x automatically with appropriate methods depending on their type, unless method is specified

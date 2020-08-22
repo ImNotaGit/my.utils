@@ -117,14 +117,21 @@ de <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colna
 
 rm.low.genes <- function(dat, rm.low.frac.gt=0.5, count.cutoff=10) {
   # remove genes with low count
-  # dat: gene-by-sample expression matrix of raw counts
+  # dat: gene-by-sample expression matrix of raw counts, or an "eset" i.e. list(expr, pheno, geneid)
+
+  is.eset <- is.list(dat) && all(c("expr","pheno") %in% names(dat))
+  if (is.eset) {
+    dat0 <- dat
+    dat <- dat$expr
+  }
 
   tot.cnts <- colSums(dat)
   cutoff <- count.cutoff/median(tot.cnts)*1e6
   dat1 <- edgeR::cpm(dat, lib.size=tot.cnts)
   keep <- rowMeans(dat1<cutoff) <= rm.low.frac.gt
   message(sum(keep), " rows (genes/transcripts) remaining.")
-  dat[keep, ]
+  if (is.eset) res <- select.genes.eset(dat0, keep) else res <- dat[keep, ]
+  res
 }
 
 
