@@ -14,9 +14,10 @@ Depends:
     stringr,
     parallel,
     ggplot2,
-    ggrepel,
-    survival
+    ggrepel
 Imports:
+    survival,
+    lmerTest,
     sva,
     affy,
     limma,

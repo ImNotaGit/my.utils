@@ -321,23 +321,41 @@ gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
 }
 
 
+run.f <- function(f, dat, model, coef, ..., keep.fit, cn="Estimate", pn="Pr(>|t|)") {
+  # helper function for constructing run.lm, run.lmer, run.cox, etc.
+
+  tmp <- list(...)
+  args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(f))])
+
+  tryCatch({
+    fit <- do.call(f, args)
+    tmp <- coef(summary(fit))
+    res <- data.table(coef=tmp[coef, cn], pval=tmp[coef, pn])
+    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
+  }, error=function(e) {
+    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(coef=NA, pval=NA)
+  })
+}
+
+
 run.lm <- function(dat, model = y ~ x*z, coef="x", ..., keep.fit=FALSE) {
   # perform a linear regression (wrapper around lm)
   # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lm() can also be provided here, so need to be careful to avoid any name conflicts
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  tmp <- list(...)
-  args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(lm))])
+  run.f(f=lm, dat=dat, model=model, coef=coef, ..., keep.fit=keep.fit)
+}
 
-  tryCatch({
-    fit <- do.call(lm, args)
-    tmp <- coef(summary(fit))
-    res <- data.table(coef=tmp[coef, "Estimate"], pval=tmp[coef, "Pr(>|t|)"])
-    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
-  }, error=function(e) {
-    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(coef=NA, pval=NA)
-  })
+
+run.lmer <- function(dat, model = y ~ x + (x|cluster), coef="x", ..., keep.fit=FALSE) {
+  # fit a multilevel linear model (wrapper around lmerTest::lmer)
+  # dat: a data.table containing covariates; model: formula for model; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
+  # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lmer() can also be provided here, so need to be careful to avoid any name conflicts
+  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+
+  library(lmerTest)
+  run.f(f=lmer, dat=dat, model=model, coef=coef, ..., keep.fit=keep.fit)
 }
 
 
@@ -347,17 +365,8 @@ run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata
   # ...: additional variables to be used for fitting the Cox model, if they appear in the model formula and are not in dat; additional arguments to coxph() can also be provided here, so need to be careful to avoid any name conflicts
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  tmp <- list(...)
-  args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(coxph))])
-
-  tryCatch({
-    fit <- do.call(coxph, args)
-    tmp <- coef(summary(fit))
-    res <- data.table(coef=tmp[coef, "coef"], pval=tmp[coef, "Pr(>|z|)"])
-    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
-  }, error=function(e) {
-    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(coef=NA, pval=NA)
-  })
+  library(survival)
+  run.f(f=coxph, dat=dat, model=model, coef=coef, ..., keep.fit=keep.fit, cn="coef", pn="Pr(>|z|)")
 }
 
 
