@@ -321,8 +321,8 @@ gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
 }
 
 
-run.f <- function(f, dat, model, coef, ..., keep.fit, cn="Estimate", pn="Pr(>|t|)") {
-  # helper function for constructing run.lm, run.lmer, run.cox, etc.
+run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fit) {
+  # helper function for constructing the various run* functions
 
   tmp <- list(...)
   args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(f))])
@@ -330,21 +330,29 @@ run.f <- function(f, dat, model, coef, ..., keep.fit, cn="Estimate", pn="Pr(>|t|
   tryCatch({
     fit <- do.call(f, args)
     tmp <- coef(summary(fit))
-    res <- data.table(coef=tmp[coef, cn], pval=tmp[coef, pn])
+    res <- data.table(coef=tmp[coef, colnames(tmp) %in% c("Estimate","coef")], pval=tmp[coef, colnames(tmp) %in% c("Pr(>|t|)","Pr(>|z|)")])
+    # "anova-like" test if required
+    if (drop.test!="none") {
+      tmp <- drop1(fit, as.formula(paste("~",drop)), test=drop.test)
+      res[, pval:=tmp[drop, names(tmp) %in% c("Pr(>F)","Pr(>Chi)")]]
+    }
     if (keep.fit) list(fitted.model=fit, summary.table=res) else res
   }, error=function(e) {
+    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
     if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(coef=NA, pval=NA)
   })
 }
 
 
-run.lm <- function(dat, model = y ~ x*z, coef="x", ..., keep.fit=FALSE) {
+run.lm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chisq","F"), drop=coef, keep.fit=FALSE) {
   # perform a linear regression (wrapper around lm)
   # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lm() can also be provided here, so need to be careful to avoid any name conflicts
+  # drop.test: whether to use p value from a test based on nested models (F test or likelihood ratio test) by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(lm()), i.e. based on t test
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  run.f(f=lm, dat=dat, model=model, coef=coef, ..., keep.fit=keep.fit)
+  drop.test <- match.arg(drop.test)
+  run.f(f=lm, dat=dat, model=model, coef=coef, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
 }
 
 
@@ -354,40 +362,45 @@ run.lmer <- function(dat, model = y ~ x + (x|cluster), coef="x", ..., keep.fit=F
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lmer() can also be provided here, so need to be careful to avoid any name conflicts
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  library(lmerTest)
+  library(lmerTest) # the package was imported but not attached; attach it if this function is called
   run.f(f=lmer, dat=dat, model=model, coef=coef, ..., keep.fit=keep.fit)
 }
 
 
-run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata(gender) + cluster(id), coef="x", ..., keep.fit=FALSE) {
-  # perform a Cox regression (wrapper around coxph)
-  # dat: a data.table containing covariates; model: formula for Cox regression; coef: for which variable/term should the Cox regression coefficient and Wald test p value be returned; the default values are intended to be an example
-  # ...: additional variables to be used for fitting the Cox model, if they appear in the model formula and are not in dat; additional arguments to coxph() can also be provided here, so need to be careful to avoid any name conflicts
+run.glm <- function(dat, model = y ~ x*z, coef="x", family=binomial, ..., drop.test=c("none","Chisq","F","Rao"), drop=coef, keep.fit=FALSE) {
+  # fit a generalized linear model (wrapper around glm); family default to binomial for logistic regression
+  # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
+  # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to glm() can also be provided here, so need to be careful to avoid any name conflicts
+  # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(glm()), i.e. based on Wald test that may be problematic for small sample size
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  library(survival)
-  run.f(f=coxph, dat=dat, model=model, coef=coef, ..., keep.fit=keep.fit, cn="coef", pn="Pr(>|z|)")
+  drop.test <- match.arg(drop.test)
+  run.f(f=glm, dat=dat, model=model, coef=coef, family=family, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
 }
 
 
-# to do
-#cor.all <- function(y, x, ..., dat=NULL, f=NULL, method=c("default","spearman","pearson","lm","olr","fisher","chisq","km","cox")) {
-#  # correlate y and x automatically with appropriate methods depending on their type, unless method is specified
-#  # y and x can be discrete or continuous or ordinal, in addition y can be a Surv() object; pass additional variables to be controlled for separately or as a list or data.table in ...
-#  # or pass a data.table to dat,
-#  # return a list(output, summary), output is the raw output from whatever statistical test used; summary is a data.table(estimate, pval)
-#
-#  method <- match.arg(method)
-#
-#  z <- list(...)
-#  if (is.null(dat))
-#
-#  if (method=="default") {
-#    is.y.cont <- is.numeric(y)
-#    is.y.surv <- is.Surv(y)
-#    is.x.cont <- is.numeric(x)
-#    z <- list(...)
-#
-#  }
-#
-#}
+run.clm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chisq"), drop=coef, keep.fit=FALSE) {
+  # fit a cumulative link model (e.g. ordinal logistic regression) (wrapper around ordinal::clm); the default correspond to an ordinal logistic regression
+  # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
+  # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to clm() can also be provided here, so need to be careful to avoid any name conflicts
+  # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(clm()), i.e. based on Wald test that may be problematic for small sample size
+  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+
+  library(ordinal) # the package was imported but not attached; attach it if this function is called
+  drop.test <- match.arg(drop.test)
+  run.f(f=clm, dat=dat, model=model, coef=coef, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+}
+
+
+run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata(gender) + cluster(id), coef="x", ..., drop.test=c("none","Chisq"), drop=coef, keep.fit=FALSE) {
+  # perform a Cox regression (wrapper around coxph)
+  # dat: a data.table containing covariates; model: formula for Cox regression; coef: for which variable/term should the Cox regression coefficient and p value be returned; the default values are intended to be an example
+  # ...: additional variables to be used for fitting the Cox model, if they appear in the model formula and are not in dat; additional arguments to coxph() can also be provided here, so need to be careful to avoid any name conflicts
+  # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(coxph()), i.e. based on Wald test that may be problematic for small sample size
+  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+
+  library(survival) # the package was imported but not attached; attach it if this function is called
+  drop.test <- match.arg(drop.test)
+  run.f(f=coxph, dat=dat, model=model, coef=coef, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+}
+
