@@ -1,6 +1,13 @@
 ## ----some utility functions for common small tasks----
 
 
+cn <- function(...) {
+  res <- c(...)
+  names(res) <- res
+  res
+}
+
+
 hh <- function(x, nr=5, nc=nr) {
   # check the first nr rows and nc columns of a matrix-like object
   if (nr>nrow(x)) nr <- nrow(x)
