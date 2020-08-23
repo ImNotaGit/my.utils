@@ -18,6 +18,7 @@ Depends:
 Imports:
     survival,
     lmerTest,
+    biomaRt,
     sva,
     affy,
     limma,

@@ -2,6 +2,7 @@
 
 
 cn <- function(...) {
+  # create a named vector
   res <- c(...)
   names(res) <- res
   res
@@ -89,5 +90,131 @@ replace.na <- function(DT, to=0, col.mode="numeric", in.place=TRUE) {
     if (mode(tmp)==col.mode) set(DT, i=which(is.na(tmp)), j, to)
   }
   return(DT)
+}
+
+
+convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot","refseq.nm","refseq.np","entrez","uniprot","hgnc","mgi","symbol",
+  "affy_hc_g110","affy_hg_focus","affy_hg_u133a","affy_hg_u133a_2","affy_hg_u133b","affy_hg_u133_plus_2","affy_hg_u95a","affy_hg_u95av2","affy_hg_u95b","affy_hg_u95c","affy_hg_u95d","affy_hg_u95e","affy_hta_2_0","affy_huex_1_0_st_v2","affy_hugenefl","affy_hugene_1_0_st_v1","affy_hugene_2_0_st_v1","affy_primeview","affy_u133_x3p","agilent_cgh_44b","agilent_gpl6848","agilent_sureprint_g3_ge_8x60k","agilent_sureprint_g3_ge_8x60k_v2","agilent_wholegenome","agilent_wholegenome_4x44k_v1","agilent_wholegenome_4x44k_v2","codelink_codelink","illumina_humanht_12_v3","illumina_humanht_12_v4","illumina_humanref_8_v3","illumina_humanwg_6_v1","illumina_humanwg_6_v2","illumina_humanwg_6_v3","phalanx_onearray",
+  "affy_mg_u74a","affy_mg_u74av2","affy_mg_u74b","affy_mg_u74bv2","affy_mg_u74c","affy_mg_u74cv2","affy_moe430a","affy_moe430b","affy_moex_1_0_st_v1","affy_mogene_1_0_st_v1","affy_mogene_2_1_st_v1","affy_mouse430a_2","affy_mouse430_2","affy_mu11ksuba","affy_mu11ksubb","illumina_mouseref_8","illumina_mousewg_6_v1","illumina_mousewg_6_v2"),
+  to=c("symbol","ensembl.gene","ensembl.tx","ensembl.prot","refseq.nm","refseq.np","entrez","uniprot","hgnc","mgi",
+  "affy_hc_g110","affy_hg_focus","affy_hg_u133a","affy_hg_u133a_2","affy_hg_u133b","affy_hg_u133_plus_2","affy_hg_u95a","affy_hg_u95av2","affy_hg_u95b","affy_hg_u95c","affy_hg_u95d","affy_hg_u95e","affy_hta_2_0","affy_huex_1_0_st_v2","affy_hugenefl","affy_hugene_1_0_st_v1","affy_hugene_2_0_st_v1","affy_primeview","affy_u133_x3p","agilent_cgh_44b","agilent_gpl6848","agilent_sureprint_g3_ge_8x60k","agilent_sureprint_g3_ge_8x60k_v2","agilent_wholegenome","agilent_wholegenome_4x44k_v1","agilent_wholegenome_4x44k_v2","codelink_codelink","illumina_humanht_12_v3","illumina_humanht_12_v4","illumina_humanref_8_v3","illumina_humanwg_6_v1","illumina_humanwg_6_v2","illumina_humanwg_6_v3","phalanx_onearray",
+  "affy_mg_u74a","affy_mg_u74av2","affy_mg_u74b","affy_mg_u74bv2","affy_mg_u74c","affy_mg_u74cv2","affy_moe430a","affy_moe430b","affy_moex_1_0_st_v1","affy_mogene_1_0_st_v1","affy_mogene_2_1_st_v1","affy_mouse430a_2","affy_mouse430_2","affy_mu11ksuba","affy_mu11ksubb","illumina_mouseref_8","illumina_mousewg_6_v1","illumina_mousewg_6_v2"),
+  species=c("hs","mm"), keep.map=TRUE, use.biomart=TRUE) {
+  # convert gene ids, default is from some id to gene symbol
+  # x: vector of ids
+  # keep.map: if TRUE, return list(map, result), where map is a data.table with two columns "from" and "to" and result is a vector of gene symbols corresponding to x; if FALSE, return just result
+  # use.biomart: for now only TRUE is implemented
+
+  from <- match.arg(from)
+  to <- match.arg(to)
+  species <- match.arg(species)
+
+  if (use.biomart) {
+    from <- switch(from,
+      ensembl.gene="ensembl_gene_id",
+      ensembl.tx="ensembl_transcript_id",
+      ensembl.prot="ensembl_peptide_id",
+      refseq.nm="refseq_mrna",
+      refseq.np="refseq_peptide",
+      entrez="entrezgene_id",
+      uniprot="uniprotswissprot",
+      hgnc="hgnc_id",
+      mgi="mgi_id",
+      from
+    )
+    to <- switch(to,
+      ensembl.gene="ensembl_gene_id",
+      ensembl.tx="ensembl_transcript_id",
+      ensembl.prot="ensembl_peptide_id",
+      refseq.nm="refseq_mrna",
+      refseq.np="refseq_peptide",
+      entrez="entrezgene_id",
+      uniprot="uniprotswissprot",
+      hgnc="hgnc_id",
+      mgi="mgi_id",
+      to
+    )
+    if (from=="symbol") from <- switch(species, hs="hgnc_symbol", mm="mgi_symbol")
+    if (to=="symbol") to <- switch(species, hs="hgnc_symbol", mm="mgi_symbol")
+    db <- switch(species, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl")
+    mart <- biomaRt::useMart(biomart="ensembl", dataset=db)
+    mapp <- as.data.table(biomaRt::getBM(attributes=c(from, to), filters=from, values=x, mart=mart))
+    setnames(mapp, c("from","to"))
+  } else {
+    stop("Not implemented yet.")
+  }
+
+  if (mapp[, .N, by=from][, any(N>1)]) warning("One-to-many mapping, result contains only the first match.")
+  res <- mapp[match(x, from), to]
+  if (keep.map) list(map=mapp, result=res) else res
+}
+
+
+convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ensembl.prot","refseq.nm","refseq.np","entrez","uniprot","hgnc","mgi",
+  "affy_hc_g110","affy_hg_focus","affy_hg_u133a","affy_hg_u133a_2","affy_hg_u133b","affy_hg_u133_plus_2","affy_hg_u95a","affy_hg_u95av2","affy_hg_u95b","affy_hg_u95c","affy_hg_u95d","affy_hg_u95e","affy_hta_2_0","affy_huex_1_0_st_v2","affy_hugenefl","affy_hugene_1_0_st_v1","affy_hugene_2_0_st_v1","affy_primeview","affy_u133_x3p","agilent_cgh_44b","agilent_gpl6848","agilent_sureprint_g3_ge_8x60k","agilent_sureprint_g3_ge_8x60k_v2","agilent_wholegenome","agilent_wholegenome_4x44k_v1","agilent_wholegenome_4x44k_v2","codelink_codelink","illumina_humanht_12_v3","illumina_humanht_12_v4","illumina_humanref_8_v3","illumina_humanwg_6_v1","illumina_humanwg_6_v2","illumina_humanwg_6_v3","phalanx_onearray",
+  "affy_mg_u74a","affy_mg_u74av2","affy_mg_u74b","affy_mg_u74bv2","affy_mg_u74c","affy_mg_u74cv2","affy_moe430a","affy_moe430b","affy_moex_1_0_st_v1","affy_mogene_1_0_st_v1","affy_mogene_2_1_st_v1","affy_mouse430a_2","affy_mouse430_2","affy_mu11ksuba","affy_mu11ksubb","illumina_mouseref_8","illumina_mousewg_6_v1","illumina_mousewg_6_v2"),
+  to=c("symbol","ensembl.gene","ensembl.tx","ensembl.prot","refseq.nm","refseq.np","entrez","uniprot","hgnc","mgi",
+  "affy_hc_g110","affy_hg_focus","affy_hg_u133a","affy_hg_u133a_2","affy_hg_u133b","affy_hg_u133_plus_2","affy_hg_u95a","affy_hg_u95av2","affy_hg_u95b","affy_hg_u95c","affy_hg_u95d","affy_hg_u95e","affy_hta_2_0","affy_huex_1_0_st_v2","affy_hugenefl","affy_hugene_1_0_st_v1","affy_hugene_2_0_st_v1","affy_primeview","affy_u133_x3p","agilent_cgh_44b","agilent_gpl6848","agilent_sureprint_g3_ge_8x60k","agilent_sureprint_g3_ge_8x60k_v2","agilent_wholegenome","agilent_wholegenome_4x44k_v1","agilent_wholegenome_4x44k_v2","codelink_codelink","illumina_humanht_12_v3","illumina_humanht_12_v4","illumina_humanref_8_v3","illumina_humanwg_6_v1","illumina_humanwg_6_v2","illumina_humanwg_6_v3","phalanx_onearray",
+  "affy_mg_u74a","affy_mg_u74av2","affy_mg_u74b","affy_mg_u74bv2","affy_mg_u74c","affy_mg_u74cv2","affy_moe430a","affy_moe430b","affy_moex_1_0_st_v1","affy_mogene_1_0_st_v1","affy_mogene_2_1_st_v1","affy_mouse430a_2","affy_mouse430_2","affy_mu11ksuba","affy_mu11ksubb","illumina_mouseref_8","illumina_mousewg_6_v1","illumina_mousewg_6_v2"),
+  from.sp=c("mm","hs"), to.sp=c("hs","mm"), keep.map=TRUE) {
+  # convert gene ids across species, for now only between human and mice; default is mice gene symbol to human gene symbol
+  # x: vector of ids
+  # keep.map: if TRUE, return list(map, result), where map is a data.table with two columns "from" and "to" and result is a vector of gene symbols corresponding to x; if FALSE, return just result
+
+  from <- match.arg(from)
+  to <- match.arg(to)
+  from.sp <- match.arg(from.sp)
+  to.sp <- match.arg(to.sp)
+
+  from <- switch(from,
+    ensembl.gene="ensembl_gene_id",
+    ensembl.tx="ensembl_transcript_id",
+    ensembl.prot="ensembl_peptide_id",
+    refseq.nm="refseq_mrna",
+    refseq.np="refseq_peptide",
+    entrez="entrezgene_id",
+    uniprot="uniprotswissprot",
+    hgnc="hgnc_id",
+    mgi="mgi_id",
+    from
+  )
+  to <- switch(to,
+    ensembl.gene="ensembl_gene_id",
+    ensembl.tx="ensembl_transcript_id",
+    ensembl.prot="ensembl_peptide_id",
+    refseq.nm="refseq_mrna",
+    refseq.np="refseq_peptide",
+    entrez="entrezgene_id",
+    uniprot="uniprotswissprot",
+    hgnc="hgnc_id",
+    mgi="mgi_id",
+    to
+  )
+  if (from=="symbol") from <- switch(from.sp, hs="hgnc_symbol", mm="mgi_symbol")
+  if (to=="symbol") to <- switch(to.sp, hs="hgnc_symbol", mm="mgi_symbol")
+  from.db <- switch(from.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl")
+  to.db <- switch(to.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl")
+  from.mart <- biomaRt::useMart(biomart="ensembl", dataset=from.db)
+  to.mart <- biomaRt::useMart(biomart="ensembl", dataset=to.db)
+  mapp <- as.data.table(biomaRt::getLDS(attributes=from, filters=from, values=x, mart=from.mart, attributesL=to, martL=to.mart))
+  setnames(mapp, c("from","to"))
+
+  if (mapp[, .N, by=from][, any(N>1)]) warning("One-to-many mapping, result contains only the first match.")
+  res <- mapp[match(x, from), to]
+  if (keep.map) list(map=mapp, result=res) else res
+}
+
+
+convert.gset.species <- function(gs, from="hs", to="mm") {
+  # convert gene sets containing gene symbols from on species to another, by default from human to mice
+  # gs: gene sets in a list
+
+  gns <- unique(unlist(gs))
+  from1 <- from
+  to1 <- to
+  mapp <- convert.gene.id2(gns, from.sp=from1, to.sp=to1)$map
+  lapply(gs, function(x) {
+    mapp[from %in% x, unique(to)]
+  })
 }
 
