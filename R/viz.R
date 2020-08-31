@@ -233,6 +233,7 @@ plot.pair.corrs <- function(datx, daty, xlab, ylab) {
 
 
 plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="overlap.size", xlab=NULL) {
+  size1 <- size
   dat <- dat[order(get(x))]
   dat[, c(y):=factor(get(y), levels=get(y))]
   if (is.null(xlab)) xlab <- x
@@ -242,9 +243,9 @@ plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="over
     theme(axis.title.y=element_blank(),
           axis.text.y=element_text(size=10),
           axis.title.x=element_text(size=12))
-  if (!is.null(color) && is.null(size)) p <- p + geom_point(aes(color=get(color))) + scale_color_continuous(low="red3", high="grey", name=color, guide=guide_colorbar(reverse=TRUE))
-  if (!is.null(size) && is.null(color)) p <- p + geom_point(aes(size=get(size))) + scale_size_continuous(name=size)
-  if (!is.null(color) && !is.null(size)) p <- p + geom_point(aes(color=get(color), size=get(size))) + scale_color_continuous(low="red3", high="grey", name=color, guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(name=size)
+  if (!is.null(color) && is.null(size1)) p <- p + geom_point(aes(color=get(color))) + scale_color_continuous(low="red3", high="grey", name=color, guide=guide_colorbar(reverse=TRUE))
+  if (!is.null(size1) && is.null(color)) p <- p + geom_point(aes(size=get(size1))) + scale_size_continuous(name=size1)
+  if (!is.null(color) && !is.null(size1)) p <- p + geom_point(aes(color=get(color), size=get(size1))) + scale_color_continuous(low="red3", high="grey", name=color, guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(name=size1)
 
   return(p)
 }
