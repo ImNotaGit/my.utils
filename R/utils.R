@@ -103,7 +103,7 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
   # convert gene ids, default is from some id to gene symbol
   # x: vector of ids
   # use.biomart: for now only TRUE is implemented
-  # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a list of 1:many mapping
+  # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA
 
   from <- match.arg(from)
   to <- match.arg(to)
@@ -144,7 +144,18 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
     stop("Not implemented yet.")
   }
 
-  mapp[, .(to=list(unique(to))), by=from][match(x, from)][, from:=x]
+  mapp <- mapp[to!="" & !is.na(to)]
+  # if unique map, simplify `to` to a vector, otherwise keep as a list
+  n <- mapp[, .(n=uniqueN(to)), by=from][, unique(n)]
+  if (length(n)==1 && n==1) {
+  	message("Mapping is unique, the `to` column in the returned table is a vector.")
+  	mapp <- mapp[match(x, from)][, from:=x]
+  } else {
+  	message("Mapping is not unique, the `to` column in the returned table is a list.")
+  	mapp <- rbind(mapp, data.table(from=unique(setdiff(x, mapp$from)), to=NA))
+  	mapp <- mapp[, .(to=list(unique(to))), by=from][match(x, from)]
+  }
+  mapp
 }
 
 
@@ -157,7 +168,7 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   from.sp=c("mm","hs"), to.sp=c("hs","mm")) {
   # convert gene ids across species, for now only between human and mice; default is mice gene symbol to human gene symbol
   # x: vector of ids
-  # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a list of 1:many mapping
+  # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA
 
   from <- match.arg(from)
   to <- match.arg(to)
@@ -197,7 +208,18 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   mapp <- as.data.table(biomaRt::getLDS(attributes=from, filters=from, values=x, mart=from.mart, attributesL=to, martL=to.mart))
   setnames(mapp, c("from","to"))
 
-  mapp[, .(to=list(unique(to))), by=from][match(x, from)][, from:=x]
+  mapp <- mapp[to!="" & !is.na(to)]
+  # if unique map, simplify `to` to a vector, otherwise keep as a list
+  n <- mapp[, .(n=uniqueN(to)), by=from][, unique(n)]
+  if (length(n)==1 && n==1) {
+  	message("Mapping is unique, the `to` column in the returned table is a vector.")
+  	mapp <- mapp[match(x, from)][, from:=x]
+  } else {
+  	message("Mapping is not unique, the `to` column in the returned table is a list.")
+  	mapp <- rbind(mapp, data.table(from=unique(setdiff(x, mapp$from)), to=NA))
+  	mapp <- mapp[, .(to=list(unique(to))), by=from][match(x, from)]
+  }
+  mapp
 }
 
 
@@ -210,7 +232,8 @@ convert.gset.species <- function(gs, from="hs", to="mm") {
   to1 <- to
   mapp <- convert.gene.id2(gns, from.sp=from1, to.sp=to1)
   lapply(gs, function(x) {
-    mapp[from %in% x, unique(unlist(to))]
+    res <- mapp[from %in% x, unique(unlist(to))]
+    res[!is.na(res)]
   })
 }
 
