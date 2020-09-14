@@ -230,7 +230,7 @@ convert.gset.species <- function(gs, from="hs", to="mm") {
   gns <- unique(unlist(gs))
   from1 <- from
   to1 <- to
-  mapp <- convert.gene.id2(gns, from.sp=from1, to.sp=to1)
+  mapp <- suppressMessages(convert.gene.id2(gns, from.sp=from1, to.sp=to1))
   lapply(gs, function(x) {
     res <- mapp[from %in% x, unique(unlist(to))]
     res[!is.na(res)]
