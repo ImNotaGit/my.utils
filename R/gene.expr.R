@@ -93,7 +93,13 @@ de <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colna
       }
       gns <- fData(dat)[[idx]]
     } else gns <- rownames(mat)
-  } else if (is.matrix(dat)) mat <- dat
+    rownames(mat)[is.na(rownames(mat))] <- ""
+    gns[is.na(gns)] <- ""
+  } else if (is.matrix(dat)) {
+  	mat <- dat
+  	rownames(mat)[is.na(rownames(mat))] <- ""
+  	gns <- rownames(mat)
+  }
 
   #vs <- all.vars(model)
   vs <- names(model.frame(model, pheno))
@@ -104,13 +110,11 @@ de <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colna
   design <- model.matrix(model, phe)
   fit <- limma::lmFit(mat, design)
   fit <- limma::eBayes(fit, robust=robust, trend=trend)
-  res <- tryCatch(as.data.table(limma::topTable(fit, coef=coef, number=Inf, genelist=gns)),
-                  error=function(e) as.data.table(limma::topTable(fit, coef=coef, number=Inf)))
-  setnames(res, "ID", "id")
-  setnames(res, "logFC", "log.fc")
-  setnames(res, "AveExpr", "ave.expr")
-  setnames(res, "P.Value", "pval")
-  setnames(res, "adj.P.Val", "padj")
+  res <- tryCatch(limma::topTable(fit, coef=coef, number=Inf, genelist=gns),
+                  error=function(e) limma::topTable(fit, coef=coef, number=Inf))
+  if (!"id" %in% tolower(names(res))) res <- cbind(ID=row.names(res), res)
+  res <- as.data.table(res)
+  setnames(res, c("ID","logFC","AveExpr","P.Value","adj.P.Val"), c("id","log.fc","ave.expr","pval","padj"), skip_absent=TRUE)
   res
 }
 
@@ -167,10 +171,7 @@ de.edger <- function(dat, pheno, model=~., coef, lfc.cutoff=0) {
   if (lfc.cutoff==0) test.res <- edgeR::glmQLFTest(fit, coef=coef) else test.res <- edgeR::glmTreat(fit, coef=coef, lfc=lfc.cutoff)
   res <- edgeR::topTags(test.res, n=Inf)[[1]]
   res <- cbind(id=row.names(res), as.data.table(res))
-  setnames(res, "logFC", "log.fc")
-  setnames(res, "logCPM", "log.cpm")
-  setnames(res, "PValue", "pval")
-  setnames(res, "FDR", "padj")
+  setnames(res, c("logFC","logCPM","PValue","FDR"), c("log.fc","log.cpm","pval","padj"), skip_absent=TRUE)
   res
 }
 
