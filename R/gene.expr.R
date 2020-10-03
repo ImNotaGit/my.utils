@@ -70,6 +70,8 @@ prep.array <- function(dat, log="default", norm.method="loess") {
   } else if (is.matrix(dat)) return(mat)
 }
 
+prep.data <- prep.array
+
 
 voom <- function(dat, pheno=NULL, model=~., quantile=FALSE, ...) {
   # perform limma::voom normalization for RNAseq data
@@ -97,11 +99,11 @@ voom <- function(dat, pheno=NULL, model=~., quantile=FALSE, ...) {
   res <- list(voom=v, design=design, genes=gs)
 }
 
-de.limma <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
+de.limma <- function(dat, pheno=NULL, model=~., coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
   # differential expression analysis with limma
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
-  # pheno: phenotypic data as a data.frame with the same order of samples
-  # model: the linear model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # pheno: phenotypic data as a data.frame with the same order of samples; model: the linear model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms); these two will be used to compute the design matrix
+  # if dat is output from voom() then will use the design matrix saved in there, and pheno and model will be ignored
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
   # robust, trend: parameters for limma eBayes, set to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods is recommended)
   # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if TRUE then will try to get gene symbols automatically from fData(dat); if FALSE then will not try to get gene symbols; gene symbols will be added to the returned DE table
@@ -135,6 +137,7 @@ de.limma <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene
   }
 
   if (is.null(design)) {
+    if (is.null(pheno)) stop("Need to provide `pheno`, a data.table of covariates/phenotypic data.")
     vs <- all.vars(model)
     #vs <- names(model.frame(model, pheno))
     ccs <- complete.cases(pheno[, vs, with=FALSE])
@@ -143,7 +146,7 @@ de.limma <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene
     phe <- pheno[ccs]
     design <- model.matrix(model, phe)
   } else {
-    message("Using the design matrix saved in dat.")
+    message("Using the design matrix saved in `dat`, ignoring `pheno` and `model`, if provided.")
   }
   
   fit <- limma::lmFit(mat, design=design)
