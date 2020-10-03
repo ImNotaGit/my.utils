@@ -142,6 +142,8 @@ de.limma <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene
     if (is.matrix(mat)) mat <- mat[, ccs]
     phe <- pheno[ccs]
     design <- model.matrix(model, phe)
+  } else {
+    message("Using the design matrix saved in dat.")
   }
   
   fit <- limma::lmFit(mat, design=design)
@@ -154,6 +156,7 @@ de.limma <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene
   res
 }
 
+de <- de.limma
 
 rm.low.genes <- function(dat, rm.low.frac.gt=0.5, count.cutoff=10) {
   # remove genes with low count
