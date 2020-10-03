@@ -23,11 +23,11 @@ rm.batch.eff <- function(...) {
 }
 
 
-prep.data <- function(dat, log="default", norm.method="loess") {
+prep.array <- function(dat, log="default", norm.method="loess") {
   # prepare microarray gene expression data: transformation, normalization, etc.
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
   # log: whether to log2(x+1) data; "default" automatically determines whether to transform
-  # norm.method: either "loess" or "quantile"; "loess" won't work if the data contains NA
+  # norm.method: either "loess" or "quantile"; "loess" won't work if the data contains NA, so if any NA will first set these to 0 with warning
 
   if (class(dat)=="ExpressionSet") {
     # for featureData, fix potential improper column names so that later limma::topTable can use them
@@ -71,7 +71,33 @@ prep.data <- function(dat, log="default", norm.method="loess") {
 }
 
 
-de <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
+voom <- function(dat, pheno=NULL, model=~., quantile=FALSE, ...) {
+  # perform limma::voom normalization for RNAseq data
+  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+  # pheno: phenotypic data as a data.frame with the same order of samples; model: the model to be used for downstream DE; together with pheno, this will be used to generate the design matrix passed to limma::voom; if pheno is NULL, then design will be NULL
+  # quantile: whether to apply quantile normalization, if TRUE, will pass normalize.method="quantile" to limma::voom
+  # ...: passed to limma::voom
+  # return a list(voom, design, genes), where voom is the limma::voom() output, i.e. an EList object, design is the design matrix, and genes is rownames(dat)
+
+  if (!is.null(pheno)) {
+    vs <- all.vars(model)
+    #vs <- names(model.frame(model, pheno))
+    ccs <- complete.cases(pheno[, vs, with=FALSE])
+    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+    dat <- dat[, ccs]
+    phe <- pheno[ccs]
+    design <- model.matrix(model, phe)
+  } else design <- NULL
+  gs <- rownames(dat)
+  
+  dat <- edgeR::DGEList(counts=dat)
+  dat <- edgeR::calcNormFactors(dat)
+  if (quantile) nm <- "quantile" else nm <- "none"
+  v <- limma::voom(counts=dat, design=design, normalize.method=nm, ...)
+  res <- list(voom=v, design=design, genes=gs)
+}
+
+de.limma <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
   # differential expression analysis with limma
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
   # pheno: phenotypic data as a data.frame with the same order of samples
@@ -95,20 +121,30 @@ de <- function(dat, pheno, model=~., coef, robust=FALSE, trend=FALSE, gene.colna
     } else gns <- rownames(mat)
     rownames(mat)[is.na(rownames(mat))] <- ""
     gns[is.na(gns)] <- ""
+    design <- NULL
   } else if (is.matrix(dat)) {
   	mat <- dat
   	rownames(mat)[is.na(rownames(mat))] <- ""
   	gns <- rownames(mat)
+    design <- NULL
+  } else if (is.list(dat) && "voom" %in% names(dat) && class(dat$voom)=="EList") {
+    # if dat is output from voom()
+    mat <- dat$voom
+    gns <- dat$genes
+    design <- dat$design
   }
 
-  #vs <- all.vars(model)
-  vs <- names(model.frame(model, pheno))
-  ccs <- complete.cases(pheno[, vs, with=FALSE])
-  if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
-  mat <- mat[, ccs]
-  phe <- pheno[ccs]
-  design <- model.matrix(model, phe)
-  fit <- limma::lmFit(mat, design)
+  if (is.null(design)) {
+    vs <- all.vars(model)
+    #vs <- names(model.frame(model, pheno))
+    ccs <- complete.cases(pheno[, vs, with=FALSE])
+    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+    if (is.matrix(mat)) mat <- mat[, ccs]
+    phe <- pheno[ccs]
+    design <- model.matrix(model, phe)
+  }
+  
+  fit <- limma::lmFit(mat, design=design)
   fit <- limma::eBayes(fit, robust=robust, trend=trend)
   res <- tryCatch(limma::topTable(fit, coef=coef, number=Inf, genelist=gns),
                   error=function(e) limma::topTable(fit, coef=coef, number=Inf))
@@ -139,13 +175,13 @@ rm.low.genes <- function(dat, rm.low.frac.gt=0.5, count.cutoff=10) {
 }
 
 
-get.tmm.log.cpm <- function(dat) {
+get.tmm.log.cpm <- function(dat, prior.count=1) {
   # get log2(cpm+1) values with edgeR (TMM-normalized), from raw counts
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
 
   dge <- edgeR::DGEList(counts=dat)
   dge <- edgeR::calcNormFactors(dge)
-  edgeR::cpm(dge, log=TRUE, prior.count=1)
+  edgeR::cpm(dge, log=TRUE, prior.count=prior.count)
 }
 
 
@@ -156,8 +192,8 @@ de.edger <- function(dat, pheno, model=~., coef, lfc.cutoff=0) {
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
 
-  #vs <- all.vars(model)
-  vs <- names(model.frame(model, pheno))
+  vs <- all.vars(model)
+  #vs <- names(model.frame(model, pheno))
   ccs <- complete.cases(pheno[, vs, with=FALSE])
   if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
   dat <- dat[, ccs]
