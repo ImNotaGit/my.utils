@@ -73,10 +73,11 @@ prep.array <- function(dat, log="default", norm.method="loess") {
 prep.data <- prep.array
 
 
-voom <- function(dat, pheno=NULL, model=~., quantile=FALSE, ...) {
+voom <- function(dat, pheno=NULL, model=~., design=NULL, quantile=FALSE, ...) {
   # perform limma::voom normalization for RNAseq data
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
-  # pheno: phenotypic data as a data.frame with the same order of samples; model: the model to be used for downstream DE; together with pheno, this will be used to generate the design matrix passed to limma::voom; if pheno is NULL, then design will be NULL
+  # pheno: phenotypic data as a data.frame with the same order of samples; model: the model to be used for downstream DE; together with pheno, this will be used to generate the design matrix passed to limma::voom
+  # or provide design matrix in design; if both pheno and design are NULL, then design will be NULL
   # quantile: whether to apply quantile normalization, if TRUE, will pass normalize.method="quantile" to limma::voom
   # ...: passed to limma::voom
   # return a list(voom, design, genes), where voom is the limma::voom() output, i.e. an EList object, design is the design matrix, and genes is rownames(dat)
@@ -89,7 +90,7 @@ voom <- function(dat, pheno=NULL, model=~., quantile=FALSE, ...) {
     dat <- dat[, ccs]
     phe <- pheno[ccs]
     design <- model.matrix(model, phe)
-  } else design <- NULL
+  }
   gs <- rownames(dat)
   
   dat <- edgeR::DGEList(counts=dat)
@@ -99,11 +100,11 @@ voom <- function(dat, pheno=NULL, model=~., quantile=FALSE, ...) {
   res <- list(voom=v, design=design, genes=gs)
 }
 
-de.limma <- function(dat, pheno=NULL, model=~., coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
+de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
   # differential expression analysis with limma
   # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
   # pheno: phenotypic data as a data.frame with the same order of samples; model: the linear model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms); these two will be used to compute the design matrix
-  # if dat is output from voom() then will use the design matrix saved in there, and pheno and model will be ignored
+  # or provide design matrix in design, pheno and design cannot both be NULL, unless if dat is output from voom() then will use the design matrix saved in there, and pheno, model and design will be ignored
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
   # robust, trend: parameters for limma eBayes, set to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods is recommended)
   # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if TRUE then will try to get gene symbols automatically from fData(dat); if FALSE then will not try to get gene symbols; gene symbols will be added to the returned DE table
@@ -123,21 +124,20 @@ de.limma <- function(dat, pheno=NULL, model=~., coef, robust=FALSE, trend=FALSE,
     } else gns <- rownames(mat)
     rownames(mat)[is.na(rownames(mat))] <- ""
     gns[is.na(gns)] <- ""
-    design <- NULL
   } else if (is.matrix(dat)) {
   	mat <- dat
   	rownames(mat)[is.na(rownames(mat))] <- ""
   	gns <- rownames(mat)
-    design <- NULL
   } else if (is.list(dat) && "voom" %in% names(dat) && class(dat$voom)=="EList") {
     # if dat is output from voom()
     mat <- dat$voom
     gns <- dat$genes
     design <- dat$design
+    if (!is.null(design)) message("Using the design matrix saved in `dat`, ignoring `pheno` and `model`, if provided.")
   }
 
   if (is.null(design)) {
-    if (is.null(pheno)) stop("Need to provide `pheno`, a data.table of covariates/phenotypic data.")
+    if (is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
     vs <- all.vars(model)
     #vs <- names(model.frame(model, pheno))
     ccs <- complete.cases(pheno[, vs, with=FALSE])
@@ -145,8 +145,6 @@ de.limma <- function(dat, pheno=NULL, model=~., coef, robust=FALSE, trend=FALSE,
     if (is.matrix(mat)) mat <- mat[, ccs]
     phe <- pheno[ccs]
     design <- model.matrix(model, phe)
-  } else {
-    message("Using the design matrix saved in `dat`, ignoring `pheno` and `model`, if provided.")
   }
   
   fit <- limma::lmFit(mat, design=design)
@@ -191,20 +189,25 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 }
 
 
-de.edger <- function(dat, pheno, model=~., coef, lfc.cutoff=0) {
+de.edger <- function(dat, pheno=NULL, model=~., design=NULL, coef, lfc.cutoff=0) {
   # differential expression analysis with edgeR
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.frame with the same order of samples
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot be both NULL
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
 
-  vs <- all.vars(model)
-  #vs <- names(model.frame(model, pheno))
-  ccs <- complete.cases(pheno[, vs, with=FALSE])
-  if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
-  dat <- dat[, ccs]
-  phe <- pheno[ccs]
-  design <- model.matrix(model, phe)
+  if (is.null(design)) {
+    if (is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
+    vs <- all.vars(model)
+    #vs <- names(model.frame(model, pheno))
+    ccs <- complete.cases(pheno[, vs, with=FALSE])
+    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+    dat <- dat[, ccs]
+    phe <- pheno[ccs]
+    design <- model.matrix(model, phe)
+  }
+  
   dge <- edgeR::DGEList(counts=dat)
   dge <- edgeR::calcNormFactors(dge)
   dge <- edgeR::estimateDisp(dge, design)
