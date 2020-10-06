@@ -23,9 +23,9 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, lab
   vary <- sprintf("PC %d (%.2f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
 
   dat <- data.table(x=res$x[, pc.x], y=res$x[, pc.y])
-  if (!is.list(color)) color=list(color=color)
-  if (!is.list(shape)) shape=list(shape=shape)
-  if (!is.list(size)) size=list(size=size)
+  if (!is.list(color) && !is.null(color)) color=list(color=color)
+  if (!is.list(shape) && !is.null(shape)) shape=list(shape=shape)
+  if (!is.list(size) && !is.null(size)) size=list(size=size)
   suppressWarnings(dat[, c(names(color), names(shape), names(size)):=c(color, shape, size)])
   p <- ggplot(dat, aes(x=x, y=y)) +
     xlab(varx) + ylab(vary) +
