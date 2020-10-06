@@ -1,6 +1,6 @@
 ## ----functions for quick data exploration and visualization----
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, label=NULL, alpha=0.9, center=TRUE, scale=TRUE, ...) {
+plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, label=NULL, alpha=0.8, center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat of sample-by-variable
   # pc.x and pc.y: PC's to plot on the x any y axes
   # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting; for label, "" won't be printed, so this can be used to label part of the samples
@@ -23,9 +23,13 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, lab
   vary <- sprintf("PC %d (%.2f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
 
   dat <- data.table(x=res$x[, pc.x], y=res$x[, pc.y])
+  if (!is.list(color)) color=list(color=color)
+  if (!is.list(shape)) shape=list(shape=shape)
+  if (!is.list(size)) size=list(size=size)
+  suppressWarnings(dat[, c(names(color), names(shape), names(size)):=c(color, shape, size)])
   p <- ggplot(dat, aes(x=x, y=y)) +
     xlab(varx) + ylab(vary) +
-    geom_point(aes(color=color, shape=shape, size=size), alpha=alpha) +
+    geom_point(aes_string(color=names(color), shape=names(shape), size=names(size)), alpha=alpha) +
     theme_classic()
 
   if (!is.null(label)) p <- p + geom_text_repel(label=label)
