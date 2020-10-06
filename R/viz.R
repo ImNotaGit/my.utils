@@ -1,11 +1,12 @@
 ## ----functions for quick data exploration and visualization----
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, alpha=0.8, center=TRUE, scale=TRUE, ...) {
+plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, alpha=0.8, center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat of sample-by-variable
   # pc.x and pc.y: PC's to plot on the x any y axes
-  # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting; for label, "" won't be printed, so this can be used to label part of the samples
+  # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting
   # color, shape, size, label can also be name lists of a single element, e.g. color=list(group=vector), then will use the list name in the ledgends
   # label.size: size of label text
+  # label.subset: a logical or index vector corresponding to label, the subset of samples to add label
   # alpha: a single alpha value for the plotting, not used as aes() for plotting
   # center, scale, ...: passed to prcomp()
 
@@ -33,7 +34,13 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, lab
     geom_point(aes_string(color=names(color), shape=names(shape), size=names(size)), alpha=alpha) +
     theme_classic()
 
-  if (!is.null(label)) p <- p + geom_text_repel(label=label, size=label.size)
+  if (!is.null(label)) {
+  	if (!is.null(label.subset)) {
+  	  if (is.logical(label.subset)) label.subset <- which(label.subset)
+  	  label[-label.subset] <- ""
+  	}
+  	p <- p + geom_text_repel(label=label, size=label.size)
+  }
 
   return(p)
 }
