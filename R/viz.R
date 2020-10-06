@@ -1,9 +1,11 @@
 ## ----functions for quick data exploration and visualization----
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, label=NULL, center=TRUE, scale=TRUE, ...) {
+plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, label=NULL, alpha=0.9, center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat of sample-by-variable
   # pc.x and pc.y: PC's to plot on the x any y axes
-  # color, shape, label: vectors corresponding to the samples (rows of mat) for plotting
+  # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting; for label, "" won't be printed, so this can be used to label part of the samples
+  # color, shape, size, label can also be name lists of a single element, e.g. color=list(group=vector), then will use the list name in the ledgends
+  # alpha: a single alpha value for the plotting, not used as aes() for plotting
   # center, scale, ...: passed to prcomp()
 
   if (scale) {
@@ -20,8 +22,11 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, label=NULL, ce
   varx <- sprintf("PC %d (%.2f%%)", pc.x, res$sdev[pc.x]^2 /tot.var*100)
   vary <- sprintf("PC %d (%.2f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
 
-  p <- qplot(res$x[, pc.x], res$x[, pc.y], xlab=varx, ylab=vary,
-    color=color, shape=shape) + theme_classic()
+  dat <- data.table(x=res$x[, pc.x], y=res$x[, pc.y])
+  p <- ggplot(dat, aes(x=x, y=y)) +
+    xlab(varx) + ylab(vary) +
+    geom_point(aes(color=color, shape=shape, size=size), alpha=alpha) +
+    theme_classic()
 
   if (!is.null(label)) p <- p + geom_text_repel(label=label)
 
