@@ -83,8 +83,8 @@ voom <- function(dat, pheno=NULL, model=~., design=NULL, quantile=FALSE, ...) {
   # return a list(voom, design, genes), where voom is the limma::voom() output, i.e. an EList object, design is the design matrix, and genes is rownames(dat)
 
   if (!is.null(pheno)) {
-    vs <- all.vars(model)
-    #vs <- names(model.frame(model, pheno))
+    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
+    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
     ccs <- complete.cases(pheno[, vs, with=FALSE])
     if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
     dat <- dat[, ccs]
@@ -138,8 +138,8 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, robust=FALSE,
 
   if (is.null(design)) {
     if (is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
-    vs <- all.vars(model)
-    #vs <- names(model.frame(model, pheno))
+    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
+    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
     ccs <- complete.cases(pheno[, vs, with=FALSE])
     if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
     if (is.matrix(mat)) mat <- mat[, ccs]
@@ -199,8 +199,8 @@ de.edger <- function(dat, pheno=NULL, model=~., design=NULL, coef, lfc.cutoff=0)
 
   if (is.null(design)) {
     if (is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
-    vs <- all.vars(model)
-    #vs <- names(model.frame(model, pheno))
+    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
+    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
     ccs <- complete.cases(pheno[, vs, with=FALSE])
     if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
     dat <- dat[, ccs]
