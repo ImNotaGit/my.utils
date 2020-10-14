@@ -1,8 +1,14 @@
 ## ----some utility functions for common small tasks----
 
+env <- Sys.getenv
+fp <- file.path
+carg <- function(trailingOnly=TRUE) commandArgs(trailingOnly=trailingOnly)
+
+co <- function(..., c="") paste(..., collapse=c)
+cc <- function(...) paste(..., collapse=", ")
 
 cn <- function(...) {
-  # create a named vector
+  # create a named vector with name being the same as vector content
   res <- c(...)
   names(res) <- res
   res
@@ -17,9 +23,10 @@ hh <- function(x, nr=5, nc=nr) {
 }
 
 
-write.tab <- function(x, file, append=FALSE, col.names=TRUE) {
-  # write a tsv file w/o quotation and w/o row names, but by default with col names
-  fwrite(x, file=file, append=append, quote=FALSE, sep="\t", na="NA", col.names=col.names)
+write.tab <- function(x, file, cn=TRUE, rn=FALSE, sep="\t", quote="auto", append=FALSE) {
+  # write table with changed defaults
+  tryCatch(fwrite(x, file=file, append=append, quote=quote, sep=sep, na="NA", col.names=cn, row.names=rn),
+  	error=function(e) write.table(x, file=file, append=append, quote=ifelse(quote=="auto",FALSE,quote), sep=sep, na="NA", col.names=cn, row.names=rn))
 }
 
 
