@@ -11,6 +11,23 @@ get.major.genes <- function(x) {
   !grepl("^(---|LOC|OTTHUMG|MIR|LINC)", x) & !grepl("-(OS|AS|IT|OT)[0-9]*$", x)
 }
 
+get.gene.lengths <- function(txdb=NULL, fn=NULL, format=c("auto","gff3","gtf")) {
+  # compute length of each gene give a gtf or gff file or a TxDb object
+  # txdb: txdb object; fn: file name; format: format of file
+  # use summed length of non-overlapping exons per gene (the "union" method)
+
+  if (is.null(txdb)) {
+  	if (is.null(fn)) stop("Need to provide either exdb or fn.")
+  	format <- match.arg(format)
+    txdb <- GenomicFeatures::makeTxDbFromGFF(fn, format=format)
+  }
+  
+  # exons by gene
+  exons.by.gene <- GenomicFeatures::exonsBy(txdb, by="gene")
+  # summed length of non-overlapping exons per gene
+  sum(IRanges::width(GenomicRanges::reduce(exons.by.gene)))
+}
+
 
 rm.batch.eff <- function(...) {
   # remove the known batch effect in expression data. should pass in arbitrary numbers of gene-by-sample expression matrices. return a list of batch effect-corrected data, in the original order.
