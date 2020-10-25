@@ -106,11 +106,11 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
   to=c("symbol","ensembl.gene","ensembl.tx","ensembl.prot","refseq.nm","refseq.np","entrez","uniprot","hgnc","mgi",
   "affy_hc_g110","affy_hg_focus","affy_hg_u133a","affy_hg_u133a_2","affy_hg_u133b","affy_hg_u133_plus_2","affy_hg_u95a","affy_hg_u95av2","affy_hg_u95b","affy_hg_u95c","affy_hg_u95d","affy_hg_u95e","affy_hta_2_0","affy_huex_1_0_st_v2","affy_hugenefl","affy_hugene_1_0_st_v1","affy_hugene_2_0_st_v1","affy_primeview","affy_u133_x3p","agilent_cgh_44b","agilent_gpl6848","agilent_sureprint_g3_ge_8x60k","agilent_sureprint_g3_ge_8x60k_v2","agilent_wholegenome","agilent_wholegenome_4x44k_v1","agilent_wholegenome_4x44k_v2","codelink_codelink","illumina_humanht_12_v3","illumina_humanht_12_v4","illumina_humanref_8_v3","illumina_humanwg_6_v1","illumina_humanwg_6_v2","illumina_humanwg_6_v3","phalanx_onearray",
   "affy_mg_u74a","affy_mg_u74av2","affy_mg_u74b","affy_mg_u74bv2","affy_mg_u74c","affy_mg_u74cv2","affy_moe430a","affy_moe430b","affy_moex_1_0_st_v1","affy_mogene_1_0_st_v1","affy_mogene_2_1_st_v1","affy_mouse430a_2","affy_mouse430_2","affy_mu11ksuba","affy_mu11ksubb","illumina_mouseref_8","illumina_mousewg_6_v1","illumina_mousewg_6_v2"),
-  species=c("hs","mm"), use.biomart=TRUE) {
+  species=c("hs","mm"), use.biomart=TRUE, keep=TRUE) {
   # convert gene ids, default is from some id to gene symbol
   # x: vector of ids
   # use.biomart: for now only TRUE is implemented
-  # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA
+  # return a data.table with two columns "from" and "to"; "from" is in the order of x (if keep=TRUE, otherwise from will only contain the items with successful matches and in no particular order); "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA (if keep=TRUE, otherwise these won't be included)
 
   #from <- match.arg(from)
   #to <- match.arg(to)
@@ -159,11 +159,13 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
   n <- mapp[, .(n=uniqueN(to)), by=from][, unique(n)]
   if (length(n)==1 && n==1) {
   	message("Mapping is unique, the `to` column in the returned table is a vector.")
-  	mapp <- mapp[match(x, from)][, from:=x]
+  	if (keep) mapp <- mapp[match(x, from)][, from:=x]
   } else {
   	message("Mapping is not unique, the `to` column in the returned table is a list.")
-  	mapp <- rbind(mapp, data.table(from=unique(setdiff(x, mapp$from)), to=NA))
-  	mapp <- mapp[, .(to=list(unique(to))), by=from][match(x, from)]
+  	if (keep) {
+  	  mapp <- rbind(mapp, data.table(from=unique(setdiff(x, mapp$from)), to=NA))
+  	  mapp <- mapp[, .(to=list(unique(to))), by=from][match(x, from)]
+  	} else mapp <- mapp[, .(to=list(unique(to))), by=from]	
   }
   mapp
 }
@@ -175,10 +177,10 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   to=c("symbol","ensembl.gene","ensembl.tx","ensembl.prot","refseq.nm","refseq.np","entrez","uniprot","hgnc","mgi",
   "affy_hc_g110","affy_hg_focus","affy_hg_u133a","affy_hg_u133a_2","affy_hg_u133b","affy_hg_u133_plus_2","affy_hg_u95a","affy_hg_u95av2","affy_hg_u95b","affy_hg_u95c","affy_hg_u95d","affy_hg_u95e","affy_hta_2_0","affy_huex_1_0_st_v2","affy_hugenefl","affy_hugene_1_0_st_v1","affy_hugene_2_0_st_v1","affy_primeview","affy_u133_x3p","agilent_cgh_44b","agilent_gpl6848","agilent_sureprint_g3_ge_8x60k","agilent_sureprint_g3_ge_8x60k_v2","agilent_wholegenome","agilent_wholegenome_4x44k_v1","agilent_wholegenome_4x44k_v2","codelink_codelink","illumina_humanht_12_v3","illumina_humanht_12_v4","illumina_humanref_8_v3","illumina_humanwg_6_v1","illumina_humanwg_6_v2","illumina_humanwg_6_v3","phalanx_onearray",
   "affy_mg_u74a","affy_mg_u74av2","affy_mg_u74b","affy_mg_u74bv2","affy_mg_u74c","affy_mg_u74cv2","affy_moe430a","affy_moe430b","affy_moex_1_0_st_v1","affy_mogene_1_0_st_v1","affy_mogene_2_1_st_v1","affy_mouse430a_2","affy_mouse430_2","affy_mu11ksuba","affy_mu11ksubb","illumina_mouseref_8","illumina_mousewg_6_v1","illumina_mousewg_6_v2"),
-  from.sp=c("mm","hs"), to.sp=c("hs","mm")) {
+  from.sp=c("mm","hs"), to.sp=c("hs","mm"), keep=TRUE) {
   # convert gene ids across species, for now only between human and mice; default is mice gene symbol to human gene symbol
   # x: vector of ids
-  # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA
+  # return a data.table with two columns "from" and "to"; "from" is in the order of x (if keep=TRUE, otherwise from will only contain the items with successful matches and in no particular order); "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA (if keep=TRUE, otherwise these won't be included)
 
   #from <- match.arg(from)
   #to <- match.arg(to)
@@ -227,11 +229,13 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   n <- mapp[, .(n=uniqueN(to)), by=from][, unique(n)]
   if (length(n)==1 && n==1) {
   	message("Mapping is unique, the `to` column in the returned table is a vector.")
-  	mapp <- mapp[match(x, from)][, from:=x]
+  	if (keep) mapp <- mapp[match(x, from)][, from:=x]
   } else {
   	message("Mapping is not unique, the `to` column in the returned table is a list.")
-  	mapp <- rbind(mapp, data.table(from=unique(setdiff(x, mapp$from)), to=NA))
-  	mapp <- mapp[, .(to=list(unique(to))), by=from][match(x, from)]
+  	if (keep) {
+  	  mapp <- rbind(mapp, data.table(from=unique(setdiff(x, mapp$from)), to=NA))
+  	  mapp <- mapp[, .(to=list(unique(to))), by=from][match(x, from)]
+  	} else mapp <- mapp[, .(to=list(unique(to))), by=from]	
   }
   mapp
 }
