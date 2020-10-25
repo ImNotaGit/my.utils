@@ -112,9 +112,12 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
   # use.biomart: for now only TRUE is implemented
   # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA
 
-  from <- match.arg(from)
-  to <- match.arg(to)
-  species <- match.arg(species)
+  #from <- match.arg(from)
+  #to <- match.arg(to)
+  #species <- match.arg(species)
+  from <- from[1] # occasionally I needed to use sth else, but still would like to provide the list of commonly used options for information; thus this way
+  to <- to[1]
+  species <- species[1]
 
   if (use.biomart) {
     from <- switch(from,
@@ -143,7 +146,7 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
     )
     if (from=="symbol") from <- switch(species, hs="hgnc_symbol", mm="mgi_symbol")
     if (to=="symbol") to <- switch(species, hs="hgnc_symbol", mm="mgi_symbol")
-    db <- switch(species, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl")
+    db <- switch(species, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl", species)
     mart <- biomaRt::useMart(biomart="ensembl", dataset=db)
     mapp <- as.data.table(biomaRt::getBM(attributes=c(from, to), filters=from, values=x, mart=mart))
     setnames(mapp, c("from","to"))
@@ -177,10 +180,14 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   # x: vector of ids
   # return a data.table with two columns "from" and "to"; "from" is in the order of x; "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA
 
-  from <- match.arg(from)
-  to <- match.arg(to)
-  from.sp <- match.arg(from.sp)
-  to.sp <- match.arg(to.sp)
+  #from <- match.arg(from)
+  #to <- match.arg(to)
+  #from.sp <- match.arg(from.sp)
+  #to.sp <- match.arg(to.sp)
+  from <- from[1] # occasionally I needed to use sth else, but still would like to provide the list of commonly used options for information; thus this way
+  to <- to[1]
+  from.sp <- from.sp[1]
+  to.sp <- to.sp[1]
 
   from <- switch(from,
     ensembl.gene="ensembl_gene_id",
@@ -208,8 +215,8 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   )
   if (from=="symbol") from <- switch(from.sp, hs="hgnc_symbol", mm="mgi_symbol")
   if (to=="symbol") to <- switch(to.sp, hs="hgnc_symbol", mm="mgi_symbol")
-  from.db <- switch(from.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl")
-  to.db <- switch(to.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl")
+  from.db <- switch(from.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl", from.sp)
+  to.db <- switch(to.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl", to.sp)
   from.mart <- biomaRt::useMart(biomart="ensembl", dataset=from.db)
   to.mart <- biomaRt::useMart(biomart="ensembl", dataset=to.db)
   mapp <- as.data.table(biomaRt::getLDS(attributes=from, filters=from, values=x, mart=from.mart, attributesL=to, martL=to.mart))
