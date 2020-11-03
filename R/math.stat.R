@@ -294,11 +294,12 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
   tmp <- sapply(gsets, function(x) sum(x %in% fg1))
   gsets <- gsets[tmp>overlap.cutoff]
 
+  if (length(fg)==0) {
+    warning("The number of query genes is zero, NULL returned.\n")
+    return(NULL)
+  }
+
   enrich.gset0 <- function(fg, gset, bg) {
-    if (length(fg)==0) {
-      warning("The number of query genes is zero, NULL returned.\n")
-      return(NULL)
-    }
     res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater")
     data.table(overlap.size=res$table[1,1], gene.set.size=res$table[1,1]+res$table[2,1], odds.ratio=res$estimate, pval=res$p.value, overlap.genes=list(unique(intersect(intersect(fg, gset),bg))))
   }
