@@ -290,6 +290,10 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
   # fg: query genes; gsets: gene sets as a list object; bg: background genes; overlap.cutoff: only select those gene sets with >this value overlap with fg genes; padj.cutoff: fdr threshold.
   # nc: number of cores
 
+  fg1 <- intersect(fg, bg)
+  tmp <- sapply(gsets, function(x) sum(x %in% fg1))
+  gsets <- gsets[tmp>overlap.cutoff]
+
   enrich.gset0 <- function(fg, gset, bg) {
     if (length(fg)==0) {
       warning("The number of query genes is zero, NULL returned.\n")
@@ -301,7 +305,6 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
   res <- mclapply(gsets, enrich.gset0, fg=fg, bg=bg, mc.cores=nc)
   res <- rbindlist(res, idcol="gene.set")
   if (ncol(res)==0) return(NULL)
-  res <- res[overlap.size>overlap.cutoff]
   res[, padj:=p.adjust(pval, method="BH")]
   res <- res[order(padj,pval)][padj<padj.cutoff]
   setcolorder(res, c("gene.set","odds.ratio","pval","padj","gene.set.size","overlap.size","overlap.genes"))
