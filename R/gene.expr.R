@@ -119,7 +119,7 @@ voom <- function(dat, pheno=NULL, model=~., design=NULL, quantile=FALSE, ...) {
 
 de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
   # differential expression analysis with limma
-  # dat: either a matrix (of gene-by-sample) or an ExpressionSet object
+  # dat: either a matrix (of gene-by-sample) or an ExpressionSet object, or output from voom()
   # pheno: phenotypic data as a data.frame with the same order of samples; model: the linear model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms); these two will be used to compute the design matrix
   # or provide design matrix in design, pheno and design cannot both be NULL, unless if dat is output from voom() then will use the design matrix saved in there, and pheno, model and design will be ignored
   # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
