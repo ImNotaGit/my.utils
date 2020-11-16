@@ -4,8 +4,8 @@ env <- Sys.getenv
 fp <- file.path
 carg <- function(trailingOnly=TRUE) commandArgs(trailingOnly=trailingOnly)
 
-co <- function(..., c="") paste(..., collapse=c)
-cc <- function(...) paste(..., collapse=", ")
+co <- function(..., c="") paste(c(...), collapse=c)
+cc <- function(...) paste(c(...), collapse=", ")
 
 cn <- function(...) {
   # create a named vector with name being the same as vector content
