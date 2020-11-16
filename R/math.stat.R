@@ -266,6 +266,7 @@ enrich.test <- function(qset=NULL, refset=NULL, uset=NULL, confus.mat=NULL, ...)
   # fisher's exact test
   res <- fisher.test(conf, ...)
   res$table <- conf
+  res$summary <- data.table(OR=res$testimate, pval=res$p.value)
   return(res)
 }
 

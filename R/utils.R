@@ -23,6 +23,15 @@ hh <- function(x, nr=5, nc=nr) {
 }
 
 
+dt2mat <- function(x, rn=1, keep=-1) {
+  # convert a data.table to matrix, using the rn column as rownames, and remove columns as specified by keep
+  rns <- x[[rn]]
+  res <- data.matrix(x[, keep, with=FALSE])
+  rownames(res) <- rns
+  res
+}
+
+
 write.tab <- function(x, file, cn=TRUE, rn=FALSE, sep="\t", quote="auto", append=FALSE) {
   # write table with changed defaults
   tryCatch(fwrite(x, file=file, append=append, quote=quote, sep=sep, na="NA", col.names=cn, row.names=rn),
