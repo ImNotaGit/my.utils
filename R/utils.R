@@ -15,6 +15,12 @@ cn <- function(...) {
 }
 
 
+start.rmote <- function(id=1) {
+  # start rmote server
+  rmote::start_rmote(port=as.numeric(env(co("PORT",id))))
+}
+
+
 hh <- function(x, nr=5, nc=nr) {
   # check the first nr rows and nc columns of a matrix-like object
   if (nr>nrow(x)) nr <- nrow(x)
