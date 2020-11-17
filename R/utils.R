@@ -20,6 +20,8 @@ start.rmote <- function(id=1) {
   rmote::start_rmote(port=as.numeric(env(co("PORT",id))))
 }
 
+stop.rmote <- rmote::stop_rmote
+
 
 hh <- function(x, nr=5, nc=nr) {
   # check the first nr rows and nc columns of a matrix-like object
