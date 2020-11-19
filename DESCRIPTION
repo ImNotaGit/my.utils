@@ -13,10 +13,16 @@ Depends:
     data.table,
     stringr,
     parallel,
+    doParallel,
+    foreach,
+    magrittr,
+    purrr,
+    furrr,
     ggplot2,
     ggrepel
-Imports:
+Suggests:
     survival,
+    rms,
     lmerTest,
     ordinal,
     GenomicFeatures,
@@ -27,6 +33,5 @@ Imports:
     affy,
     limma,
     edgeR,
-    fgsea
-Suggests:
+    fgsea,
     rmote
