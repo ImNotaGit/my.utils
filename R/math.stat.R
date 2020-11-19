@@ -286,30 +286,97 @@ class.enrich.pval <- function(tab.qset, tab.uset, class.name) {
 }
 
 
-enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1) {
+enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1, name="gene") {
   # the over-representation type of enrichment test (with Fisher's exact test here.)
   # fg: query genes; gsets: gene sets as a list object; bg: background genes; overlap.cutoff: only select those gene sets with >this value overlap with fg genes; padj.cutoff: fdr threshold.
   # nc: number of cores
+  # can be used for sets of other items rather than genes, `name` is used to modify the column names in output table to reflect this
 
   fg1 <- intersect(fg, bg)
   tmp <- sapply(gsets, function(x) sum(x %in% fg1))
   gsets <- gsets[tmp>overlap.cutoff]
 
   if (length(fg)==0) {
-    warning("The number of query genes is zero, NULL returned.\n")
+    warning("The size query set is zero, NULL returned.\n")
     return(NULL)
   }
 
   enrich.gset0 <- function(fg, gset, bg) {
     res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater")
-    data.table(overlap.size=res$table[1,1], gene.set.size=res$table[1,1]+res$table[2,1], odds.ratio=res$estimate, pval=res$p.value, overlap.genes=list(unique(intersect(intersect(fg, gset),bg))))
+    data.table(overlap.size=res$table[1,1], set.size=res$table[1,1]+res$table[2,1], odds.ratio=res$estimate, pval=res$p.value, overlap=list(unique(intersect(intersect(fg, gset),bg))))
   }
   res <- mclapply(gsets, enrich.gset0, fg=fg, bg=bg, mc.cores=nc)
-  res <- rbindlist(res, idcol="gene.set")
+  res <- rbindlist(res, idcol="set")
   if (ncol(res)==0) return(NULL)
   res[, padj:=p.adjust(pval, method="BH")]
   res <- res[order(padj,pval)][padj<padj.cutoff]
-  setcolorder(res, c("gene.set","odds.ratio","pval","padj","gene.set.size","overlap.size","overlap.genes"))
+  setcolorder(res, c("set","odds.ratio","pval","padj","set.size","overlap.size","overlap"))
+  setnames(res, c("set","set.size","overlap"), c(paste0(name,".set"), paste0(name,".set.size"), paste0("overlap.",name,"s")))
+  res
+}
+
+
+make.confus.mat.combo <- function(fg1, fg2, ref1, ref2, bg1, bg2) {
+  # make confusion matrix formed by {fg1,fg2}, {ref1 x ref2}, and {bg1 x bg2}, each pair being ordered, i.e. (a,b) is considered to be different from (b,a); pairs formed by the same item e.g. (a,a) are excluded
+  # fg1 and fg2 should have the same length, forming pairs element-wise
+  # ref1, ref2, bg1, bg2 should be vectors contain unique items
+
+  tmp <- fg1 %in% bg1 & fg2 %in% bg2
+  fg1 <- fg1[tmp]
+  fg2 <- fg2[tmp]
+  ref1 <- ref1[ref1 %in% bg1]
+  ref2 <- ref2[ref2 %in% bg2]
+  ref.n <- length(ref1)*length(ref2)-sum(ref1 %in% ref2)  # size of ref
+  bg.n <- length(bg1)*length(bg2)-sum(bg1 %in% bg2)  # size of bg
+
+  #           | in ref | not in ref | sum
+  # in fg     |  x11   |    x12     | length(fg1) (==length(fg2))
+  # not in fg |  x21   |    x22     |
+  # sum       |  ref.n |            | bg.n
+
+  x11 <- sum(fg1 %in% ref1 & fg2 %in% ref2)
+  x12 <- length(fg1) - x11
+  x21 <- ref.n - x11
+  x22 <- bg.n - ref.n - x12
+
+  matrix(c(x11,x21,x12,x22), 2)
+}
+
+
+enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.cutoff=0, padj.cutoff=1.1) {
+  # fg1 and fg2: vectors of equal length, all the element-wise pairs {(fg1[i],fg2[i])} formed by these is the "foreground" set
+  # refs1 and refs2: named lists of set annotations to be used on the 1st and 2nd item respectively, i.e. sth like list(set1=c("x1","x2",...), ...)
+  # each pair-wise combination of refs1[[i]] and refs2[[j]] will from a "reference" set, which contain all possible ordered pairs formed by different items in refs1[[i]] and refs2[[j]]
+  # bg1 and bg2: vectors representing backgrounds for the 1st and 2nd item; each should contain unique items; all pairwise {(bg1[i],bg2[j]) | bg1[i]!=bg2[j]} will form the "background" set
+  # nc: number of cores
+  # overlap.cutoff: only cases where number of overlap between "foreground" and "reference" set > this value will be kept for P value adjustment
+  # padj.cutoff: only cases with BH-adjusted P < this value will be returned
+
+  # helper function
+  enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff) {
+    conf <- make.confus.mat.combo(fg1, fg2, ref1, ref2, bg1, bg2)
+    if (conf[1,1]<=overlap.cutoff) return(NULL)
+    res <- fisher.test(conf, alternative="greater")
+    data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=conf[1,1], ref.set.size=conf[1,1]+conf[2,1], odds.ratio=res$estimate, pval=res$p.value)
+  }
+
+  # reduce ref set sizes
+  refs1 <- refs1[sapply(refs1, function(x) sum(x %in% fg1)>overlap.cutoff)]
+  refs2 <- refs2[sapply(refs2, function(x) sum(x %in% fg2)>overlap.cutoff)]
+
+  cl <- makeForkCluster(nc)
+  registerDoParallel(cl)
+
+  res <- foreach(ref1=refs1, ref1n=names(refs1), .combine=rbind) %:%
+    foreach(ref2=refs2, ref2n=names(refs2), .combine=rbind) %dopar%
+      enrich.combo.set(fg1, fg2, ref1, ref2, ref1n, ref2n, bg1, bg2, overlap.cutoff)
+  
+  stopImplicitCluster()
+  stopCluster(cl)
+
+  res[, padj:=p.adjust(pval, method="BH")]
+  res <- res[order(padj,pval)][padj<padj.cutoff]
+  setcolorder(res, c("ref.set1","ref.set2","odds.ratio","pval","padj","ref.set.size","overlap.size"))
   res
 }
 
