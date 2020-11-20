@@ -316,33 +316,6 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
 }
 
 
-make.confus.mat.combo <- function(fg1, fg2, ref1, ref2, bg1, bg2) {
-  # make confusion matrix formed by {fg1,fg2}, {ref1 x ref2}, and {bg1 x bg2}, each pair being ordered, i.e. (a,b) is considered to be different from (b,a); pairs formed by the same item e.g. (a,a) are excluded
-  # fg1 and fg2 should have the same length, forming pairs element-wise
-  # ref1, ref2, bg1, bg2 should be vectors contain unique items
-
-  tmp <- fg1 %in% bg1 & fg2 %in% bg2
-  fg1 <- fg1[tmp]
-  fg2 <- fg2[tmp]
-  ref1 <- ref1[ref1 %in% bg1]
-  ref2 <- ref2[ref2 %in% bg2]
-  ref.n <- length(ref1)*length(ref2)-sum(ref1 %in% ref2)  # size of ref
-  bg.n <- length(bg1)*length(bg2)-sum(bg1 %in% bg2)  # size of bg
-
-  #           | in ref | not in ref | sum
-  # in fg     |  x11   |    x12     | length(fg1) (==length(fg2))
-  # not in fg |  x21   |    x22     |
-  # sum       |  ref.n |            | bg.n
-
-  x11 <- sum(fg1 %in% ref1 & fg2 %in% ref2)
-  x12 <- length(fg1) - x11
-  x21 <- ref.n - x11
-  x22 <- bg.n - ref.n - x12
-
-  matrix(c(x11,x21,x12,x22), 2)
-}
-
-
 enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.cutoff=0, padj.cutoff=1.1) {
   # fg1 and fg2: vectors of equal length, all the element-wise pairs {(fg1[i],fg2[i])} formed by these is the "foreground" set
   # refs1 and refs2: named lists of set annotations to be used on the 1st and 2nd item respectively, i.e. sth like list(set1=c("x1","x2",...), ...)
@@ -352,12 +325,31 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
   # overlap.cutoff: only cases where number of overlap between "foreground" and "reference" set > this value will be kept for P value adjustment
   # padj.cutoff: only cases with BH-adjusted P < this value will be returned
 
-  # helper function
+  # helper function for one pair of ret sets
   enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff) {
-    conf <- make.confus.mat.combo(fg1, fg2, ref1, ref2, bg1, bg2)
-    if (conf[1,1]<=overlap.cutoff) return(NULL)
-    res <- fisher.test(conf, alternative="greater")
-    data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=conf[1,1], ref.set.size=conf[1,1]+conf[2,1], odds.ratio=res$estimate, pval=res$p.value)
+    # create 2x2 matrix
+    tmp <- fg1 %in% bg1 & fg2 %in% bg2
+    fg1 <- fg1[tmp]
+    fg2 <- fg2[tmp]
+    ref1 <- ref1[ref1 %in% bg1]
+    ref2 <- ref2[ref2 %in% bg2]
+    ref.n <- length(ref1)*length(ref2)-sum(ref1 %in% ref2)  # size of ref
+    bg.n <- length(bg1)*length(bg2)-sum(bg1 %in% bg2)  # size of bg
+    #           | in ref | not in ref | sum
+    # in fg     |  x11   |    x12     | length(fg1) (==length(fg2))
+    # not in fg |  x21   |    x22     |
+    # sum       |  ref.n |            | bg.n
+    tmp <- fg1 %in% ref1 & fg2 %in% ref2
+    overlap <- paste0("(",fg1[tmp],",",fg2[tmp],")")
+    x11 <- sum(tmp)
+    x12 <- length(fg1) - x11
+    x21 <- ref.n - x11
+    x22 <- bg.n - ref.n - x12
+    mat <- matrix(c(x11,x21,x12,x22), 2)
+    if (mat[1,1]<=overlap.cutoff) return(NULL)
+    # fisher.test and summarize result
+    res <- fisher.test(mat, alternative="greater")
+    data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=mat[1,1], ref.set.size=mat[1,1]+mat[2,1], overlap.pairs=list(overlap), odds.ratio=res$estimate, pval=res$p.value)  
   }
 
   # reduce ref set sizes
@@ -377,7 +369,7 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
   if (is.null(res)) return(NULL)
   res[, padj:=p.adjust(pval, method="BH")]
   res <- res[order(padj,pval)][padj<padj.cutoff]
-  setcolorder(res, c("ref.set1","ref.set2","odds.ratio","pval","padj","ref.set.size","overlap.size"))
+  setcolorder(res, c("ref.set1","ref.set2","odds.ratio","pval","padj","ref.set.size","overlap.size","overlap.pairs"))
   res
 }
 
