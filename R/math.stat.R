@@ -374,6 +374,7 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
   stopImplicitCluster()
   stopCluster(cl)
 
+  if (is.null(res)) return(NULL)
   res[, padj:=p.adjust(pval, method="BH")]
   res <- res[order(padj,pval)][padj<padj.cutoff]
   setcolorder(res, c("ref.set1","ref.set2","odds.ratio","pval","padj","ref.set.size","overlap.size"))
