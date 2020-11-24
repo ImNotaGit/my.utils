@@ -327,26 +327,26 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
 
   # helper function for one pair of ret sets
   enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff) {
-    # create 2x2 matrix
     tmp <- fg1 %in% bg1 & fg2 %in% bg2
-    fg1 <- fg1[tmp]
-    fg2 <- fg2[tmp]
-    ref1 <- ref1[ref1 %in% bg1]
-    ref2 <- ref2[ref2 %in% bg2]
-    ref.n <- length(ref1)*length(ref2)-sum(ref1 %in% ref2)  # size of ref
+    f1 <- fg1[tmp]
+    f2 <- fg2[tmp]
+    r1 <- ref1[ref1 %in% bg1]
+    r2 <- ref2[ref2 %in% bg2]
+    
+    tmp <- f1 %in% r1 & f2 %in% r2
+    x11 <- sum(tmp)
+    if (x11<=overlap.cutoff) return(NULL)
+    overlap <- paste0("(",f1[tmp],",",f2[tmp],")")
+    x12 <- length(f1) - x11
+    ref.n <- length(r1)*length(r2)-sum(r1 %in% r2)  # size of ref
+    x21 <- ref.n - x11
     bg.n <- length(bg1)*length(bg2)-sum(bg1 %in% bg2)  # size of bg
+    x22 <- bg.n - ref.n - x12
     #           | in ref | not in ref | sum
     # in fg     |  x11   |    x12     | length(fg1) (==length(fg2))
     # not in fg |  x21   |    x22     |
     # sum       |  ref.n |            | bg.n
-    tmp <- fg1 %in% ref1 & fg2 %in% ref2
-    overlap <- paste0("(",fg1[tmp],",",fg2[tmp],")")
-    x11 <- sum(tmp)
-    x12 <- length(fg1) - x11
-    x21 <- ref.n - x11
-    x22 <- bg.n - ref.n - x12
     mat <- matrix(c(x11,x21,x12,x22), 2)
-    if (mat[1,1]<=overlap.cutoff) return(NULL)
     # fisher.test and summarize result
     res <- fisher.test(mat, alternative="greater")
     data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=mat[1,1], ref.set.size=mat[1,1]+mat[2,1], overlap.pairs=list(overlap), odds.ratio=res$estimate, pval=res$p.value)  
@@ -363,8 +363,8 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
     foreach(ref2=refs2, ref2n=names(refs2), .combine=rbind) %dopar%
       enrich.combo.set(fg1, fg2, ref1, ref2, ref1n, ref2n, bg1, bg2, overlap.cutoff)
   
-  stopImplicitCluster()
   stopCluster(cl)
+  stopImplicitCluster()
 
   if (is.null(res)) return(NULL)
   res[, padj:=p.adjust(pval, method="BH")]
