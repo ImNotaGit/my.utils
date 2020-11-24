@@ -302,7 +302,7 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
   }
 
   enrich.gset0 <- function(fg, gset, bg) {
-    res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater")
+    res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater", conf.int=FALSE)
     data.table(overlap.size=res$table[1,1], set.size=res$table[1,1]+res$table[2,1], odds.ratio=res$estimate, pval=res$p.value, overlap=list(unique(intersect(intersect(fg, gset),bg))))
   }
   res <- mclapply(gsets, enrich.gset0, fg=fg, bg=bg, mc.cores=nc)
@@ -348,7 +348,7 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
     # sum       |  ref.n |            | bg.n
     mat <- matrix(c(x11,x21,x12,x22), 2)
     # fisher.test and summarize result
-    res <- fisher.test(mat, alternative="greater")
+    res <- fisher.test(mat, alternative="greater", conf.int=FALSE)
     data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=mat[1,1], ref.set.size=mat[1,1]+mat[2,1], overlap.pairs=list(overlap), odds.ratio=res$estimate, pval=res$p.value)  
   }
 
