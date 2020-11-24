@@ -286,26 +286,45 @@ class.enrich.pval <- function(tab.qset, tab.uset, class.name) {
 }
 
 
-enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1, name="gene") {
+fisher.simple <- function (x)  {
+  # simple function for fisher's test for 2x2 table given in x
+  # return list(estimate=odds.ratio, p.value),
+  # p.value equivalent to fisher.test(x, alternative="greater", or=1)
+  # odds.ratio simply approximated by ad/bc in the 2x2 table
+
+  m <- x[1,1]+x[2,1]
+  n <- x[1,2]+x[2,2]
+  k <- x[1,1]+x[1,2]
+  or <- x[1,1]*x[2,2]/x[1,2]/x[2,1]
+  pval <- phyper(x[1,1]-1, m, n, k, lower.tail=FALSE)
+  list(estimate=or, p.value=pval)
+}
+
+
+enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1, name="gene", simple=FALSE) {
   # the over-representation type of enrichment test (with Fisher's exact test here.)
   # fg: query genes; gsets: gene sets as a list object; bg: background genes; overlap.cutoff: only select those gene sets with >this value overlap with fg genes; padj.cutoff: fdr threshold.
   # nc: number of cores
   # can be used for sets of other items rather than genes, `name` is used to modify the column names in output table to reflect this
-
-  fg1 <- intersect(fg, bg)
-  tmp <- sapply(gsets, function(x) sum(x %in% fg1))
-  gsets <- gsets[tmp>overlap.cutoff]
+  # simple: use fisher.simple() for p value, and simple approximate the odds ratio as ad/bc in the 2x2 table
 
   if (length(fg)==0) {
     warning("The size query set is zero, NULL returned.\n")
     return(NULL)
   }
 
-  enrich.gset0 <- function(fg, gset, bg) {
-    res <- enrich.test(qset=fg, refset=gset, uset=bg, alternative="greater", conf.int=FALSE)
-    data.table(overlap.size=res$table[1,1], set.size=res$table[1,1]+res$table[2,1], odds.ratio=res$estimate, pval=res$p.value, overlap=list(unique(intersect(intersect(fg, gset),bg))))
+  # helper function
+  enrich.gset <- function(fg, gset, bg, simple) {
+    mat <- make.confus.mat(qset=fg, refset=gset, uset=bg, margins=FALSE)
+    if (simple) res <- fisher.simple(mat) else res <- fisher.test(mat, alternative="greater", conf.int=FALSE)
+    data.table(overlap.size=mat[1,1], set.size=mat[1,1]+mat[2,1], odds.ratio=res$estimate, pval=res$p.value, overlap=list(unique(intersect(intersect(fg, gset),bg))))
   }
-  res <- mclapply(gsets, enrich.gset0, fg=fg, bg=bg, mc.cores=nc)
+
+  fg1 <- intersect(fg, bg)
+  tmp <- sapply(gsets, function(x) sum(x %in% fg1))
+  gsets <- gsets[tmp>overlap.cutoff]
+
+  res <- mclapply(gsets, enrich.gset, fg=fg, bg=bg, simple=simple, mc.cores=nc)
   res <- rbindlist(res, idcol="set")
   if (ncol(res)==0) return(NULL)
   res[, padj:=p.adjust(pval, method="BH")]
@@ -316,7 +335,7 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
 }
 
 
-enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.cutoff=0, padj.cutoff=1.1) {
+enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.cutoff=0, padj.cutoff=1.1, simple=TRUE) {
   # fg1 and fg2: vectors of equal length, all the element-wise pairs {(fg1[i],fg2[i])} formed by these is the "foreground" set
   # refs1 and refs2: named lists of set annotations to be used on the 1st and 2nd item respectively, i.e. sth like list(set1=c("x1","x2",...), ...)
   # each pair-wise combination of refs1[[i]] and refs2[[j]] will from a "reference" set, which contain all possible ordered pairs formed by different items in refs1[[i]] and refs2[[j]]
@@ -324,9 +343,10 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
   # nc: number of cores
   # overlap.cutoff: only cases where number of overlap between "foreground" and "reference" set > this value will be kept for P value adjustment
   # padj.cutoff: only cases with BH-adjusted P < this value will be returned
+  # simple: use fisher.simple() for p value, and simple approximate the odds ratio as ad/bc in the 2x2 table
 
   # helper function for one pair of ret sets
-  enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff) {
+  enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff, simple) {
     tmp <- fg1 %in% bg1 & fg2 %in% bg2
     f1 <- fg1[tmp]
     f2 <- fg2[tmp]
@@ -348,7 +368,7 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
     # sum       |  ref.n |            | bg.n
     mat <- matrix(c(x11,x21,x12,x22), 2)
     # fisher.test and summarize result
-    res <- fisher.test(mat, alternative="greater", conf.int=FALSE)
+    if (simple) res <- fisher.simple(mat) else res <- fisher.test(mat, alternative="greater", conf.int=FALSE)
     data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=mat[1,1], ref.set.size=mat[1,1]+mat[2,1], overlap.pairs=list(overlap), odds.ratio=res$estimate, pval=res$p.value)  
   }
 
@@ -361,7 +381,7 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
 
   res <- foreach(ref1=refs1, ref1n=names(refs1), .combine=rbind) %:%
     foreach(ref2=refs2, ref2n=names(refs2), .combine=rbind) %dopar%
-      enrich.combo.set(fg1, fg2, ref1, ref2, ref1n, ref2n, bg1, bg2, overlap.cutoff)
+      enrich.combo.set(fg1, fg2, ref1, ref2, ref1n, ref2n, bg1, bg2, overlap.cutoff, simple)
   
   stopCluster(cl)
   stopImplicitCluster()
