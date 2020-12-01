@@ -70,13 +70,13 @@ cp.groups <- function(..., ylab="Value", more.args=list()) {
   ll <- length(l)
   if (ll==2) {
     stat <- do.call(wilcox, c(list(value~group, dat), more.args))
-    stat.p <- stat["pval.wilcox"]
-    stat.r <- stat["r.wilcox"]
+    stat.p <- stat$pval
+    stat.r <- stat$r.wilcox
     stat.out <- sprintf("wilcox p = %.2g; r = %.2g", stat.p, stat.r)
   } else if (ll==3) {
     stat <- do.call(wilcox3, c(list(value~group, dat), more.args))
-    stat.p <- stat[, pval.wilcox]
-    stat.r <- stat[, r.wilcox]
+    stat.p <- stat$pval
+    stat.r <- stat$r.wilcox
     stat.out <- paste0("wilcox p(12,23,13) = ", paste(sprintf("%.2g", stat.p), collapse="; "), "\nr = ", paste(sprintf("%.2g", stat.r), collapse="; "))
   } else stat.out <- "Groups"
 
@@ -136,15 +136,15 @@ mcp.groups <- function(..., ylab="Value", more.args=list()) {
   if (ll==2) {
     stat.out <- sapply(datl, function(x) {
       stat <- do.call(wilcox, c(list(value~group, x), more.args))
-      stat.p <- stat["pval.wilcox"]
-      stat.r <- stat["r.wilcox"]
+      stat.p <- stat$pval
+      stat.r <- stat$r.wilcox
       sprintf("wilcox\np=%.2g\nr=%.2g", stat.p, stat.r)
     })
   } else if (ll==3) {
     stat.out <- sapply(datl, function(x) {
       stat <- do.call(wilcox3, c(list(value~group, x), more.args))
-      stat.p <- stat[, pval.wilcox]
-      stat.r <- stat[, r.wilcox]
+      stat.p <- stat$pval
+      stat.r <- stat$r.wilcox
       paste0("wilcox (12,23,13)\np=", paste(sprintf("%.2g", stat.p), collapse="; "), "\nr=", paste(sprintf("%.2g", stat.r), collapse="; "))
     })
   } #else stat.out <- rep("", length(datl))
