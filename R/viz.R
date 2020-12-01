@@ -267,3 +267,46 @@ plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="over
   return(p)
 }
 
+
+thm <- function(x.tit=14, x.txt=0.8*ifelse(is.null(x.tit),y.tit,x.tit),
+	y.tit=ifelse(is.null(x.tit),14,x.tit), y.txt=0.8*ifelse(is.null(x.tit),y.tit,x.tit),
+	tit=NULL, face=0.8*ifelse(is.null(x.tit),y.tit,x.tit), lgd="bottom", lgd.dir="vertical", lgd.box="vertical",
+	lgd.tit=0.8*ifelse(is.null(x.tit),y.tit,x.tit), lgd.txt=0.8*ifelse(is.null(x.tit),y.tit,x.tit),
+	lgd.key=NA, lgd.margin=NA, plt.margin=NA) {
+  # shorthand for ggplot2::theme() used for adjusting axes labels, legends, and plot margins
+  # NULL means element_blank() or "none", NA means not specified (i.e. default)
+
+  if (is.na(lgd)) lgd <- "none"
+
+  f <- function(x, u=NULL) {
+  	if (is.null(x) || length(x)==0) {
+  	  element_blank()
+  	} else if (is.numeric(x)) {
+  	  if (is.null(u)) element_text(size=x) else unit(x, u)
+  	} else if (is.list(x)) {
+  	  do.call(element_text, x)
+  	} else if (length(x)==1 && is.na(x)) {
+  	  NULL
+  	} else x
+  }
+
+  pars <- list(
+  	axis.title.x=f(x.tit),
+  	axis.text.x=f(x.txt),
+  	axis.title.y=f(y.tit),
+    axis.text.y=f(y.txt),
+    plot.title=f(tit),
+    strip.text=f(face),
+    legend.position=f(lgd),
+    legend.direction=f(lgd.dir),
+    legend.title=f(lgd.tit),
+    legend.text=f(lgd.txt),
+    legend.key.size=f(lgd.key, "pt"),
+    legend.box=f(lgd.box),
+    legend.box.margin=f(lgd.margin, "pt"),
+    plot.margin=f(plt.margin, "pt")
+  )
+
+  pars <- pars[!sapply(pars, is.null)]  
+  do.call(theme, pars)
+}
