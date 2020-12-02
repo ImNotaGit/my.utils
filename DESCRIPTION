@@ -19,7 +19,8 @@ Depends:
     purrr,
     furrr,
     ggplot2,
-    ggrepel
+    ggrepel,
+    ggpubr
 Suggests:
     survival,
     rms,

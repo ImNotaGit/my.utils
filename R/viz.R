@@ -46,10 +46,12 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, lab
 }
 
 
-cp.groups <- function(..., ylab="Value", more.args=list()) {
+cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=c(12,23,13), rlab=TRUE, lab.size=4, more.args=list()) {
 
   # summary grouped data by plotting the groups side-by-side as boxplots (w/ jitter and violin plots), and when there are 2 or 3 groups, print the wilcoxon test p values and r values between each pair of groups in the x axis title.
   # assume the groups of data are given as vectors in ..., or given as a single list of vectors. The first item in ... will be checked, and if it is a list, this single list will be used.
+  # geoms: types of figure layers to plot
+  # plab: label p value(s) for which pair(s) of comparison; rlab: whether to label rank biserial correlation; lab.size: size of these labels
   # extra arguments to be passed to wilcoxon test should be provided as a list in more.args
 
   l <- list(...)
@@ -66,30 +68,67 @@ cp.groups <- function(..., ylab="Value", more.args=list()) {
   dat[, group:=factor(group, levels=unique(group))] # specify levels to keep the original order as in ...
   setnames(dat, "V1", "value")
 
+  addm <- function(x, a) (1+a)*max(x[is.finite(x)])+(-a)*min(x[is.finite(x)])
   # if there are only 2 or 3 groups, do wilcoxon test for each pair of groups
   ll <- length(l)
   if (ll==2) {
-    stat <- do.call(wilcox, c(list(value~group, dat), more.args))
-    stat.p <- stat$pval
-    stat.r <- stat$r.wilcox
-    stat.out <- sprintf("wilcox p = %.2g; r = %.2g", stat.p, stat.r)
+    tmp <- do.call(wilcox, c(list(value~group, dat), more.args))
+    stat <- dat[, .(id=12, x1=1, x2=2, x=1.5, y=addm(value,0.1), p=tmp$pval, r=tmp$r.wilcox)]
   } else if (ll==3) {
-    stat <- do.call(wilcox3, c(list(value~group, dat), more.args))
-    stat.p <- stat$pval
-    stat.r <- stat$r.wilcox
-    stat.out <- paste0("wilcox p(12,23,13) = ", paste(sprintf("%.2g", stat.p), collapse="; "), "\nr = ", paste(sprintf("%.2g", stat.r), collapse="; "))
-  } else stat.out <- "Groups"
-
+    tmp <- do.call(wilcox3, c(list(value~group, dat), more.args))
+    stat <- data.table(id=numeric(0), x=numeric(0), y=numeric(0), p=numeric(0), r=numeric(0))
+    if (12 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[1:2], .(id=12, x=1.5, y=addm(value,0.1), p=tmp$pval[1], r=tmp$r.wilcox[1])])
+    if (23 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[2:3], .(id=23, x=2.5, y=addm(value,0.1), p=tmp$pval[2], r=tmp$r.wilcox[2])])
+    if (13 %in% plab) {
+      if (length(stat$y)==0) a <- 0.1
+      else if (max(stat$y)>addm(dat$value,-0.1)) a <- 0.22
+      else if (max(stat$y)>addm(dat$value,-0.2)) a <- 0.17
+      else a <- 0.1
+      stat <- rbind(stat, data.table(id=13, x=2, y=addm(c(stat$y,dat$value),a), p=tmp$pval[3], r=tmp$r.wilcox[3]))
+    }
+    stat <- merge(data.table(id=c(12,23,13), x1=c(1,2,1), x2=c(2,3,3)), stat, by="id", all=FALSE)
+  }
+  if (rlab) stat[, lab:=latex2exp::TeX(sprintf("$\\overset{P=%.2g}{r_{rb}=%.2g}$", p, r), output="character")] else stat[, lab:=sprintf("P=%.2g", p)]
+  
   # plot summary
   formaty <- function(y) sprintf("%.2g", y)
   p <- ggplot(dat, aes(x=group, y=value)) +
-    scale_x_discrete(name=stat.out) +
-    scale_y_continuous(name=ylab, labels=formaty) +
-    geom_jitter(color="grey", size=1, width=0.15, height=0.02) +
-    geom_violin(color="blue", scale="width", width=0.6, alpha=0) +
-    geom_boxplot(width=0.3, size=0.8, alpha=0) +
+    #scale_x_discrete(name=stat.out) +
+    scale_y_continuous(name=ylab, labels=formaty)
+  if (any(c("jitter","j") %in% geoms)) {
+    if (any(c("violin","v","box","b") %in% geoms)) p <- p + geom_jitter(aes(color=group), size=0.8, width=0.15, height=0.02, alpha=0.4)
+    else p <- p +
+      geom_jitter(aes(color=group), size=0.8, width=0.2, height=0.02, alpha=0.8) +
+      stat_summary(aes(color=group), fun.data=mean_se, geom="pointrange") # plot a line with central dot for mean+/-se
+  }
+  if (any(c("violin","v") %in% geoms)) {
+    if (any(c("box","b") %in% geoms)) p <- p + geom_violin(aes(color=group), scale="width", width=0.7, alpha=0)
+    else p <- p + geom_violin(aes(color=group, fill=group), scale="width", width=0.7, alpha=0.3)
+  }
+  if (any(c("box","b") %in% geoms)) {
+    if (any(c("violin","v") %in% geoms)) w <- 0.3 else w <- 0.6
+    p <- p + geom_boxplot(aes(color=group), width=w, size=0.8, alpha=0)
+  }
+  p <- p +
+    scale_color_brewer(palette="Set1") +
+    scale_fill_brewer(palette="Set1") +
     theme_classic() +
-    theme(axis.title.y=element_text(size=15), axis.title.x=element_text(size=12), axis.text=element_text(size=12))
+    theme(axis.title.y=element_text(size=15),
+      axis.title.x=element_blank(),
+      axis.text.y=element_text(size=12),
+      axis.text.x=element_text(size=14),
+      legend.position="none")
+
+  if (ll==2 || ll==3) {
+    p <- p + geom_blank(data=dat[, .(group=group[1], y=addm(c(stat$y,value),0.05))], aes(y=y))
+    if (rlab) {
+      p <- p +
+        geom_text(data=stat, aes(x=x, y=y, label=lab), size=lab.size, parse=TRUE) +
+        geom_bracket(xmin=stat$x1, xmax=stat$x2, y.position=stat$y, label="", color="grey50")
+    } else {
+      p <- p + geom_bracket(xmin=stat$x1, xmax=stat$x2, y.position=stat$y, label=stat$lab, label.size=lab.size)
+    }
+  }
 
   return(p)
 }
@@ -175,31 +214,22 @@ mcp.groups <- function(..., ylab="Value", more.args=list()) {
 }
 
 
-plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL) {
+plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, geoms=c("box","violin","jitter"), plab=c(12,23,13), rlab=TRUE, lab.size=4, more.args=list()) {
+  # cp.groups and mcp.groups, but for the "long format" table as used by ggplot2 by default
 
-  # ensure dat$xvar and dat$facet are factors
-  dat[[xvar]] <- factor(dat[[xvar]])
-  if (!is.null(facet)) dat[[facet]] <- factor(dat[[facet]])
-  # plot
-  p <- ggplot(dat, aes(x=get(xvar), y=get(yvar))) +
-    scale_x_discrete(name=xlab) +
-    scale_y_continuous(name=ylab, labels=function(y) sprintf("%.2g", y)) +
-    geom_jitter(color="grey", size=1, width=0.15, height=0.01) +
-    theme_classic()
+  if (!is.factor(dat[[xvar]])) dat[[xvar]] <- factor(dat[[xvar]])
+
   if (is.null(facet)) {
-    p <- p +
-      geom_violin(color="blue", scale="width", width=0.6, alpha=0) +
-      geom_boxplot(width=0.3, size=0.8, alpha=0) +
-      theme(axis.title.y=element_text(size=12), axis.text.y=element_text(size=10), axis.title.x=element_text(size=12), axis.text.x=element_text(size=10, hjust=1, angle=30))
+    ii <- cn(levels(dat[[xvar]]))
+    x <- lapply(ii, function(i) dat[[yvar]][dat[[xvar]]==i])
+    cp.groups(x, ylab=ylab, geoms=geoms, plab=plab, rlab=rlab, lab.size=lab.size, more.args=more.args)
   } else {
-    p <- p + facet_wrap(~get(facet), scales="free_y") +
-      geom_violin(aes(color=get(xvar)), scale="width", width=0.6, alpha=0) +
-      labs(color=xlab) + # this is to change lengend title
-      geom_boxplot(width=0.3, size=0.8, alpha=0) +
-      theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), axis.title.y=element_text(size=12), axis.text.y=element_text(size=10), legend.position="bottom")
+    if (!is.factor(dat[[facet]])) dat[[facet]] <- factor(dat[[facet]])
+    ii <- cn(levels(dat[[xvar]]))
+    jj <- cn(levels(dat[[facet]]))
+    x <- lapply(ii, function(i) {lapply(jj, function(j) dat[[yvar]][dat[[xvar]]==i & dat[[facet]]==j])})
+    mcp.groups(x, ylab=ylab, more.args=more.args)
   }
-
-  return(p)
 }
 
 
