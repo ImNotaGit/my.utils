@@ -254,6 +254,26 @@ confus.mat.quant <- function(..., index="tpr") {
 }
 
 
+get.roc <- function(x, pos, neg, x.names=NULL, ...) {
+  # get ROC curve data or AUROC value -- wrapper around pROC::roc
+  # x is a vector of predictor score, where by default larger score corresponds to positive case
+  # x needs to be named by the cases, otherwise provide the names in x.names
+  # pos: a vector of the names of positive cases
+  # neg: a vector of the names of negative cases
+  # ... passed to pROC::roc
+
+  if (!is.null(x.names)) names(x) <- x.names
+  else if (is.null(names(x))) stop("x needs to be named.")
+  ref <- c(rep(0, length(neg)), rep(1, length(pos)))
+  names(ref) <- c(neg, pos)
+  tmp <- intersect(names(x), c(pos, neg))
+  x <- x[tmp]
+  ref <- ref[tmp]
+
+  pROC::roc(ref, x, ...)
+}
+
+
 enrich.test <- function(qset=NULL, refset=NULL, uset=NULL, confus.mat=NULL, ...) {
 
   # Fisher's exact test of enrichment of a reference set (or actual positive set, refset) in a query set (or predicted positive set, qset), with the background being the universal set (uset), or from a given confusion matrix as confus.mat.

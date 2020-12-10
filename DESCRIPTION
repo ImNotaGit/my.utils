@@ -23,6 +23,7 @@ Depends:
     ggpubr
 Suggests:
     survival,
+    pROC,
     rms,
     lmerTest,
     ordinal,
