@@ -286,7 +286,8 @@ get.prc <- function(x, pos, neg, x.names=NULL, curve=TRUE, ...) {
   pos <- pos[pos %in% names(x)]
   neg <- neg[neg %in% names(x)]
   res <- PRROC::pr.curve(scores.class0=x[pos], scores.class1=x[neg], curve=curve, ...)
-  if (curve) res else res$auc.integral
+  res$auc <- res$auc.integral
+  if (curve) res else res$auc
 }
 
 
