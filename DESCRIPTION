@@ -21,9 +21,9 @@ Depends:
     ggplot2,
     ggrepel,
     ggpubr
-Suggests:
+Imports:
     survival,
-    pROC,
+    PRROC,
     rms,
     lmerTest,
     ordinal,

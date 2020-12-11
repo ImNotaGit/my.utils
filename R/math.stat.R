@@ -254,23 +254,39 @@ confus.mat.quant <- function(..., index="tpr") {
 }
 
 
-get.roc <- function(x, pos, neg, x.names=NULL, ...) {
-  # get ROC curve data or AUROC value -- wrapper around pROC::roc
+get.roc <- function(x, pos, neg, x.names=NULL, curve=TRUE, ...) {
+  # get ROC data or AUROC -- wrapper around PRROC::roc.curve
   # x is a vector of predictor score, where by default larger score corresponds to positive case
   # x needs to be named by the cases, otherwise provide the names in x.names
   # pos: a vector of the names of positive cases
   # neg: a vector of the names of negative cases
-  # ... passed to pROC::roc
+  # curve: if false, return only AUROC value, otherwise return the object from PRROC::roc.curve(curve=TRUE)
+  # ... passed to PRROC::roc.curve
 
   if (!is.null(x.names)) names(x) <- x.names
   else if (is.null(names(x))) stop("x needs to be named.")
-  ref <- c(rep(0, length(neg)), rep(1, length(pos)))
-  names(ref) <- c(neg, pos)
-  tmp <- intersect(names(x), c(pos, neg))
-  x <- x[tmp]
-  ref <- ref[tmp]
+  pos <- pos[pos %in% names(x)]
+  neg <- neg[neg %in% names(x)]
+  res <- PRROC::roc.curve(scores.class0=x[pos], scores.class1=x[neg], curve=curve, ...)
+  if (curve) res else res$auc
+}
 
-  pROC::roc(ref, x, ...)
+
+get.prc <- function(x, pos, neg, x.names=NULL, curve=TRUE, ...) {
+  # get precision-recall curve data or AUPRC -- wrapper around PRROC::pr.curve
+  # x is a vector of predictor score, where by default larger score corresponds to positive case
+  # x needs to be named by the cases, otherwise provide the names in x.names
+  # pos: a vector of the names of positive cases
+  # neg: a vector of the names of negative cases
+  # curve: if false, return only AUPRC value, otherwise return the object from PRROC::pr.curve(curve=TRUE)
+  # ... passed to PRROC::pr.curve
+
+  if (!is.null(x.names)) names(x) <- x.names
+  else if (is.null(names(x))) stop("x needs to be named.")
+  pos <- pos[pos %in% names(x)]
+  neg <- neg[neg %in% names(x)]
+  res <- PRROC::pr.curve(scores.class0=x[pos], scores.class1=x[neg], curve=curve, ...)
+  if (curve) res else res$auc.integral
 }
 
 
