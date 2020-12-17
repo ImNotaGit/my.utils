@@ -2,7 +2,7 @@
 
 env <- Sys.getenv
 fp <- file.path
-carg <- function(trailingOnly=TRUE) commandArgs(trailingOnly=trailingOnly)
+carg <- function(x=TRUE) commandArgs(trailingOnly=x)
 
 co <- function(..., c="") paste(c(...), collapse=c)
 cc <- function(...) paste(c(...), collapse=", ")
@@ -13,6 +13,9 @@ cn <- function(...) {
   names(res) <- res
   res
 }
+
+
+unq <- function(x) unique(unlist(x))
 
 
 start.rmote <- function(id=1) {
@@ -31,10 +34,11 @@ hh <- function(x, nr=5, nc=nr) {
 }
 
 
-dt2mat <- function(x, rn=1, keep=-1) {
-  # convert a data.table to matrix, using the rn column as rownames, and remove columns as specified by keep
+dt2mat <- function(x, rn=1, rm=1) {
+  # convert a data.table to matrix, using the rn column as rownames, and remove columns as specified by rm
+  # rn and rm can be indices or column names
   rns <- x[[rn]]
-  res <- data.matrix(x[, keep, with=FALSE])
+  res <- data.matrix(x[, -rm, with=FALSE])
   rownames(res) <- rns
   res
 }
@@ -47,7 +51,7 @@ write.tab <- function(x, file, cn=TRUE, rn=FALSE, sep="\t", quote="auto", append
 }
 
 
-regex.escape <- function(x) {
+rgx.esc <- function(x) {
   # convert string x to a fully-escaped regex
   str_replace_all(x, "(\\W)", "\\\\\\1")
 }
