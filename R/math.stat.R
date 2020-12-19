@@ -373,10 +373,10 @@ enrich.gsets <- function(fg, gsets, bg, nc=1L, overlap.cutoff=0, padj.cutoff=1.1
 
 
 enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.cutoff=0, padj.cutoff=1.1, simple=TRUE) {
-  # fg1 and fg2: vectors of equal length, all the element-wise pairs {(fg1[i],fg2[i])} formed by these is the "foreground" set
+  # fg1 and fg2: vectors of equal length, all the element-wise pairs {(fg1[i],fg2[i])} formed by these is the "foreground" set; the items in a pair should be different (e.g. A-A should not be present)
   # refs1 and refs2: named lists of set annotations to be used on the 1st and 2nd item respectively, i.e. sth like list(set1=c("x1","x2",...), ...)
   # each pair-wise combination of refs1[[i]] and refs2[[j]] will from a "reference" set, which contain all possible ordered pairs formed by different items in refs1[[i]] and refs2[[j]]
-  # bg1 and bg2: vectors representing backgrounds for the 1st and 2nd item; each should contain unique items; all pairwise {(bg1[i],bg2[j]) | bg1[i]!=bg2[j]} will form the "background" set
+  # bg1 and bg2: vectors representing backgrounds for the 1st and 2nd item; each should contain unique items; all pairs {(bg1[i],bg2[j]) | bg1[i]!=bg2[j]} will form the "background" set
   # nc: number of cores
   # overlap.cutoff: only cases where number of overlap between "foreground" and "reference" set > this value will be kept for P value adjustment
   # padj.cutoff: only cases with BH-adjusted P < this value will be returned
@@ -384,16 +384,13 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
 
   # helper function for one pair of ret sets
   enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff, simple) {
-    tmp <- fg1 %in% bg1 & fg2 %in% bg2
-    f1 <- fg1[tmp]
-    f2 <- fg2[tmp]
     r1 <- ref1[ref1 %in% bg1]
     r2 <- ref2[ref2 %in% bg2]
     
-    tmp <- f1 %in% r1 & f2 %in% r2
+    tmp <- fg1 %in% r1 & fg2 %in% r2
     x11 <- sum(tmp)
     if (x11<=overlap.cutoff) return(NULL)
-    overlap <- paste0("(",f1[tmp],",",f2[tmp],")")
+    overlap <- paste0("(",fg1[tmp],",",fg2[tmp],")")
     x12 <- length(f1) - x11
     ref.n <- length(r1)*length(r2)-sum(r1 %in% r2)  # size of ref
     x21 <- ref.n - x11
@@ -409,9 +406,79 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
     data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=mat[1,1], ref.set.size=mat[1,1]+mat[2,1], overlap.pairs=list(overlap), odds.ratio=res$estimate, pval=res$p.value)  
   }
 
+  tmp <- fg1 %in% bg1 & fg2 %in% bg2
+  fg1 <- fg1[tmp]
+  fg2 <- fg2[tmp]
   # reduce ref set sizes
   refs1 <- refs1[sapply(refs1, function(x) sum(x %in% fg1)>overlap.cutoff)]
   refs2 <- refs2[sapply(refs2, function(x) sum(x %in% fg2)>overlap.cutoff)]
+
+  cl <- makeForkCluster(nc)
+  registerDoParallel(cl)
+
+  res <- foreach(ref1=refs1, ref1n=names(refs1), .combine=rbind) %:%
+    foreach(ref2=refs2, ref2n=names(refs2), .combine=rbind) %dopar%
+      enrich.combo.set(fg1, fg2, ref1, ref2, ref1n, ref2n, bg1, bg2, overlap.cutoff, simple)
+  
+  stopCluster(cl)
+  stopImplicitCluster()
+
+  if (is.null(res)) return(NULL)
+  res[, padj:=p.adjust(pval, method="BH")]
+  res <- res[order(padj,pval)][padj<padj.cutoff]
+  setcolorder(res, c("ref.set1","ref.set2","odds.ratio","pval","padj","ref.set.size","overlap.size","overlap.pairs"))
+  res
+}
+
+
+enrich.combo.sets2 <- function(fg1, fg2, refs1, refs2=refs1, bg1, bg2, nc=1L, overlap.cutoff=0, padj.cutoff=1.1, simple=TRUE) {
+  # like enrich.combo.sets, but treating item-pairs as unordered, i.e. as sets, i.e. A-B is the same as B-A
+  # fg1 and fg2: vectors of equal length, all element-wise unordered pairs {{fg1[i],fg2[i]}} formed by these is the "foreground" set; if sth like A-A is present, it will be removed; if A-B and B-A are both present, only one will be kept
+  # refs1 and refs2: named lists of set annotations to be used on the 1st and 2nd item respectively, i.e. sth like list(set1=c("x1","x2",...), ...)
+  # each unordered pair-wise combination of refs1[[i]] and refs2[[j]] (i<=j) will from a "reference" set, which contain all possible unordered pairs formed by different items in refs1[[i]] and refs2[[j]]
+  # bg1 and bg2: vectors representing backgrounds for the fg1 and fg2 item; each should contain unique items; all unordered pairs {{bg1[i],bg2[j]} | bg1[i]!=bg2[j]} will form the "background" set
+  # nc: number of cores
+  # overlap.cutoff: only cases where number of overlap between "foreground" and "reference" set > this value will be kept for P value adjustment
+  # padj.cutoff: only cases with BH-adjusted P < this value will be returned
+  # simple: use fisher.simple() for p value, and simple approximate the odds ratio as ad/bc in the 2x2 table
+
+  # helper function for one pair of ret sets
+  enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff, simple) {
+    if (ref1.name>ref2.name) return(NULL)
+    # x11, x12
+    tmp <- (fg1 %in% ref1 & fg2 %in% ref2) | (fg2 %in% ref1 & fg1 %in% ref2)
+    x11 <- sum(tmp) # (fg1,fg2) was already filtered to be inside (bg1,bg2), so w/o modifying ref1/2 this can correctly compute x11
+    if (x11<=overlap.cutoff) return(NULL)
+    overlap <- paste0("(",fg1[tmp],",",fg2[tmp],")")
+    x12 <- length(fg1) - x11
+    # size of ref, x21
+    tmp <- as.data.table(rbind(expand.grid(a=ref1, b=ref2), expand.grid(a=ref2, b=ref1)))
+    tmp <- unique(tmp[a<b])
+    ref.n <- sum((tmp$a %in% bg1 & tmp$b %in% bg2) | (tmp$b %in% bg1 & tmp$a %in% bg2))
+    x21 <- ref.n - x11
+    # size of bg, x22
+    tmp <- sum(bg1 %in% bg2)
+    bg.n <- length(bg1)*length(bg2)- (1+tmp)*tmp/2
+    x22 <- bg.n - ref.n - x12
+    #           | in ref | not in ref | sum
+    # in fg     |  x11   |    x12     | length(fg1) (==length(fg2))
+    # not in fg |  x21   |    x22     |
+    # sum       |  ref.n |            | bg.n
+    mat <- matrix(c(x11,x21,x12,x22), 2)
+    # fisher.test and summarize result
+    if (simple) res <- fisher.simple(mat) else res <- fisher.test(mat, alternative="greater", conf.int=FALSE)
+    data.table(ref.set1=ref1.name, ref.set2=ref2.name, overlap.size=mat[1,1], ref.set.size=mat[1,1]+mat[2,1], overlap.pairs=list(overlap), odds.ratio=res$estimate, pval=res$p.value)  
+  }
+
+  # preprocess fg1 and fg2
+  tmp <- fg1 %in% bg1 & fg2 %in% bg2 # here won't consider fg2 %in% bg1 & fg1 %in% bg2
+  tmp <- data.table(a=c(fg1[tmp],fg2[tmp]), b=c(fg2[tmp],fg1[tmp]))
+  tmp <- unique(tmp[a<b])
+  fg1 <- tmp$a
+  fg2 <- tmp$b
+  # reduce ref set sizes
+  refs1 <- refs1[sapply(refs1, function(x) sum(x %in% c(fg1,fg2))>overlap.cutoff)]
+  refs2 <- refs2[sapply(refs2, function(x) sum(x %in% c(fg1,fg2))>overlap.cutoff)]
 
   cl <- makeForkCluster(nc)
   registerDoParallel(cl)
