@@ -36,4 +36,5 @@ Imports:
     limma,
     edgeR,
     fgsea,
+    latex2exp,
     rmote

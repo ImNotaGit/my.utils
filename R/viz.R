@@ -235,20 +235,41 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, geoms
 }
 
 
-plot.xy <- function(x, y, trend="lm", cor.method="pearson", xlab=deparse(substitute(x)), ylab=deparse(substitute(y))) {
+plot.xy <- function(x, y, xlab=deparse(substitute(x)), ylab=deparse(substitute(y)), trend="lm", cor.method=c("pearson","spearman","kendall"), density="auto", lab.posi="auto", lab.size=4) {
 
-  q <- qplot(x=x, y=y, xlab=xlab, ylab=ylab) + theme_classic()
+  q <- qplot(x=x, y=y, xlab=xlab, ylab=ylab) +
+    theme_classic() +
+    theme(axis.title.y=element_text(size=14),
+      axis.title.x=element_text(size=14),
+      axis.text.y=element_text(size=12),
+      axis.text.x=element_text(size=12))
+
+  if (density=="auto") {
+    mat <- table(cut(x,breaks=5), cut(y,breaks=5))
+    density <- sum(mat>500)>5
+  }
+  if (density==TRUE) q <- q + stat_density_2d(aes(color=..level..), geom="polygon", alpha=0) + theme(legend.position="none")
+
   if ("lm" %in% trend) {
     q <- q + geom_smooth(method=lm, color="blue", size=0.8, fill="blue", alpha=0.2)
+    cor.method <- match.arg(cor.method)
     ct <- cor.test(x, y, method=cor.method)
     symb <- switch(cor.method, pearson="r", spearman="rho", kendall="tau")
     p <- ct$p.value
     r <- ct$estimate
-    if (r>0) {
-      q <- q + geom_text(aes(x=0.9*min(x,na.rm=TRUE)+0.1*max(x,na.rm=TRUE), y=0.1*min(y,na.rm=TRUE)+0.9*max(y,na.rm=TRUE), label=sprintf("%s = %.3f\nP = %.3g", symb, r, p)))
-    } else {
-      q <- q + geom_text(aes(x=0.1*min(x,na.rm=TRUE)+0.9*max(x,na.rm=TRUE), y=0.1*min(y,na.rm=TRUE)+0.9*max(y,na.rm=TRUE), label=sprintf("%s = %.3f\nP = %.3g", symb, r, p)))
+    if (p>=2.2e-16) lab <- sprintf("P=%.3g\n%s=%.3f", p, symb, r) else lab <- sprintf("P<2.2e-16\n%s=%.3f", symb, r)
+    if (length(lab.posi)==1 && lab.posi=="auto") {
+      if (!exists("mat")) mat <- table(cut(x,breaks=5), cut(y,breaks=5))
+      tmp <- which(mat==min(mat))
+      if (r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
+      else tmp1 <- match(c(25,20,24,15,19,23,1,2,6,3,7,11,10,14,18,22,4,8,12,16,5,9,13,17,21), tmp)
+      tmp <- tmp[tmp1[!is.na(tmp1)][1]]
+      i <- tmp %% 5
+      if (i==0) i <- 5
+      j <- (tmp-1) %/% 5 + 1
+      lab.posi <- c((1.1-0.2*i)*min(x,na.rm=TRUE)+(0.2*i-0.1)*max(x,na.rm=TRUE), (1.1-0.2*j)*min(y,na.rm=TRUE)+(0.2*j-0.1)*max(y,na.rm=TRUE))
     }
+    q <- q + annotate("text", x=lab.posi[1], y=lab.posi[2], label=lab, size=lab.size)
   }
   if ("loess" %in% trend) {
     set.seed(1)
