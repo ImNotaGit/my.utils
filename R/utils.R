@@ -14,6 +14,11 @@ cn <- function(...) {
   res
 }
 
+cn1 <- function(x, names.x) {
+  names(x) <- names.x
+  x
+}
+
 
 unq <- function(x) unique(unlist(x))
 
