@@ -72,7 +72,6 @@ plot.roc <- function(dat, lab=TRUE, lab.size=3.5, lab.posi=c(0.25,0.25)) {
     p <- p + geom_ribbon(data=dat.ci, aes(x=sp, ymin=se.min, ymax=se.max), fill="steelblue", alpha=0.2)
   }
 
-  print(p)
   return(p)
 }
 
