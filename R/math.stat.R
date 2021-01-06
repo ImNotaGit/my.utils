@@ -269,9 +269,7 @@ get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, ...) {
   else if (is.null(names(x))) stop("x needs to be named.")
   pos <- pos[pos %in% names(x)]
   neg <- neg[neg %in% names(x)]
-  truth <- names(x) %in% pos
-
-  roc.obj <- pROC::roc(truth, x, ci=ci, plot=FALSE, ...)
+  roc.obj <- pROC::roc(controls=x[neg], cases=x[pos], ci=ci, plot=FALSE, ...)
   if (msg) {
     print(roc.obj$auc)
     if (ci) print(roc.obj$ci)
