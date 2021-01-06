@@ -321,15 +321,18 @@ plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="over
 }
 
 
-thm <- function(x.tit=14, x.txt=0.8*ifelse(is.null(x.tit),y.tit,x.tit),
-	y.tit=ifelse(is.null(x.tit),14,x.tit), y.txt=0.8*ifelse(is.null(x.tit),y.tit,x.tit),
-	tit=NULL, face=0.8*ifelse(is.null(x.tit),y.tit,x.tit), lgd="bottom", lgd.dir="vertical", lgd.box="vertical",
-	lgd.tit=0.8*ifelse(is.null(x.tit),y.tit,x.tit), lgd.txt=0.8*ifelse(is.null(x.tit),y.tit,x.tit),
-	lgd.key=NA, lgd.margin=NA, plt.margin=NA) {
+thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
+	lgd=c(NA,"none","right","bottom","left","top"), lgd.dir=c(NA,"vertical","horizontal"), lgd.box=c(NA,"vertical","horizontal"),
+	lgd.tit=NA, lgd.txt=NA, lgd.key=NA, lgd.margin=NA, plt.margin=NA) {
   # shorthand for ggplot2::theme() used for adjusting axes labels, legends, and plot margins
-  # NULL means element_blank() or "none", NA means not specified (i.e. default)
+  # NULL means element_blank(), NA means not specified (i.e. default)
+  # for arguments corresponding to text elements, can give a single number for text size, or give a named list of parameters, which will be passed to element_text()
+  # for lgd.key, give a single number for legend key size in pt
+  # for lgd.margin and plt.margin, give a vector of 4 number, representing the margin values in pt for top, right, bottom, and left
 
-  if (is.na(lgd)) lgd <- "none"
+  lgd <- match.arg(lgd)
+  lgd.dir <- match.arg(lgd.dir)
+  lgd.box <- match.arg(lgd.box)
 
   f <- function(x, u=NULL) {
   	if (is.null(x) || length(x)==0) {
