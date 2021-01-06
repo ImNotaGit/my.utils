@@ -254,7 +254,7 @@ confus.mat.quant <- function(..., index="tpr") {
 }
 
 
-get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, plot=TRUE, return.plot=TRUE, ...) {
+get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, ...) {
   # get ROC data or AUROC or plot ROC curve -- wrapper around pROC::roc
   # x is a vector of predictor score, where by default larger score corresponds to positive case
   # x needs to be named by the cases, otherwise provide the names in x.names
@@ -262,8 +262,7 @@ get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, plot=TRUE, re
   # neg: a vector of the names of negative cases
   # ci: whether to compute the 95% CI of the AUROC and sensitivity values used for plotting
   # msg: whether to print message on the AUROC value (and its 95% CI)
-  # plot: whether to plot the ROC curve (with my plot.roc)
-  # return a list(roc=<output of pROC::roc>, ci=<output of pROC::ci.se>, auc=<auc value>, auc.ci=<vector of 2: 95%CI of auc>, plot=<ggplot2 obj of ROC curve>); "plot" only available if return.plot is TRUE
+  # return a list(roc=<output of pROC::roc>, ci=<output of pROC::ci.se>, auc=<auc value>, auc.ci=<vector of 2: 95%CI of auc>)
   # ... passed to pROC::roc
 
   if (!is.null(x.names)) names(x) <- x.names
@@ -279,18 +278,11 @@ get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, plot=TRUE, re
   }
   if (ci) {
     message("Computing sensitivity CI values...")
-    ci.se.obj <- pROC::ci.se(roc.obj, specificities=seq(0,1,0.02))
+    ci.se.obj <- pROC::ci.se(roc.obj, specificities=seq(0,1,0.025))
     auc.ci <- roc.obj$ci[c(1,3)]
   } else ci.se.obj <- auc.ci <- NULL
 
   res <- list(roc=roc.obj, ci=ci.se.obj, auc=roc.obj$auc, auc.ci=auc.ci)
-  if (plot) {
-    p <- plot.roc(res)
-    res$plot <- p
-    print(p)
-  }
-
-  return(res)
 }
 
 
