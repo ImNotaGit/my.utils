@@ -23,6 +23,7 @@ Depends:
     ggpubr
 Imports:
     survival,
+    pROC,
     PRROC,
     rms,
     lmerTest,

@@ -48,6 +48,35 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, lab
 }
 
 
+plot.roc <- function(dat, lab=TRUE, lab.size=3.5, lab.posi=c(0.25,0.25)) {
+  # plot ROC curve from dat, which is the outpur from get.roc1
+  # lab: whether to add label on AUROC; if so, lab.size and lab.posi specify the size and position
+
+  p <- pROC::ggroc(dat$roc) +
+    xlab("Specificity") + ylab("Sensitivity") +
+    geom_abline(slope=1, intercept=1, linetype="dashed", alpha=0.7, size=0.2) +
+    theme_classic() +
+    theme(axis.title.y=element_text(size=14),
+      axis.title.x=element_text(size=14),
+      axis.text.y=element_text(size=12),
+      axis.text.x=element_text(size=12))
+
+  if (lab) {
+    if (is.null(dat$auc.ci)) lab <- sprintf("AUC=%.3f", dat$auc)
+      else lab <- sprintf("AUC=%.3f\n95%% CI:\n(%.3f,%.3f)", dat$auc, dat$auc.ci[1], dat$auc.ci[2])
+    p <- p + annotate("text", x=lab.posi[1], y=lab.posi[2], label=lab, size=lab.size)
+  }
+
+  if (!is.null(dat$ci)) {
+    dat.ci <- data.table(sp=as.numeric(rownames(dat$ci)), se.min=dat$ci[,1], se.max=dat$ci[,3])
+    p <- p + geom_ribbon(data=dat.ci, aes(x=sp, ymin=se.min, ymax=se.max), fill="steelblue", alpha=0.2)
+  }
+
+  print(p)
+  return(p)
+}
+
+
 cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=c(12,23,13), rlab=TRUE, lab.size=4, more.args=list()) {
 
   # summary grouped data by plotting the groups side-by-side as boxplots (w/ jitter and violin plots), and when there are 2 or 3 groups, print the wilcoxon test p values and r values between each pair of groups in the x axis title.
