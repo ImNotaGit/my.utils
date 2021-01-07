@@ -255,13 +255,13 @@ confus.mat.quant <- function(..., index="tpr") {
 
 
 get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, ...) {
-  # get ROC data or AUROC or plot ROC curve -- wrapper around pROC::roc
+  # get ROC data or AUROC -- wrapper around pROC::roc
   # x is a vector of predictor score, where by default larger score corresponds to positive case
   # x needs to be named by the cases, otherwise provide the names in x.names
   # pos: a vector of the names of positive cases
   # neg: a vector of the names of negative cases
-  # ci: whether to compute the 95% CI of the AUROC and sensitivity values used for plotting
-  # msg: whether to print message on the AUROC value (and its 95% CI)
+  # ci: whether to compute the 95% CI of sensitivity values used for plotting
+  # msg: whether to print message on the AUROC value and its 95% CI
   # return a list(roc=<output of pROC::roc>, ci=<output of pROC::ci.se>, auc=<auc value>, auc.ci=<vector of 2: 95%CI of auc>)
   # ... passed to pROC::roc
 
@@ -269,18 +269,17 @@ get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, ...) {
   else if (is.null(names(x))) stop("x needs to be named.")
   pos <- pos[pos %in% names(x)]
   neg <- neg[neg %in% names(x)]
-  roc.obj <- pROC::roc(controls=x[neg], cases=x[pos], ci=ci, plot=FALSE, ...)
+  roc.obj <- pROC::roc(controls=x[neg], cases=x[pos], ci=TRUE, plot=FALSE, ...)
   if (msg) {
     print(roc.obj$auc)
-    if (ci) print(roc.obj$ci)
+    print(roc.obj$ci)
   }
   if (ci) {
     message("Computing sensitivity CI values...")
     ci.se.obj <- pROC::ci.se(roc.obj, specificities=seq(0,1,0.025))
-    auc.ci <- roc.obj$ci[c(1,3)]
-  } else ci.se.obj <- auc.ci <- NULL
+  } else ci.se.obj <- NULL
 
-  res <- list(roc=roc.obj, ci=ci.se.obj, auc=roc.obj$auc, auc.ci=auc.ci)
+  res <- list(roc=roc.obj, ci=ci.se.obj, auc=roc.obj$auc, auc.ci=roc.obj$ci[c(1,3)])
 }
 
 

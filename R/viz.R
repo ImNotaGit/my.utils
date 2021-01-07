@@ -62,8 +62,7 @@ plot.roc <- function(dat, lab=TRUE, lab.size=3.5, lab.posi=c(0.25,0.25)) {
       axis.text.x=element_text(size=12))
 
   if (lab) {
-    if (is.null(dat$auc.ci)) lab <- sprintf("AUC=%.3f", dat$auc)
-      else lab <- sprintf("AUC=%.3f\n95%% CI:\n(%.3f,%.3f)", dat$auc, dat$auc.ci[1], dat$auc.ci[2])
+    lab <- sprintf("AUC=%.3f\n95%% CI:\n(%.3f,%.3f)", dat$auc, dat$auc.ci[1], dat$auc.ci[2])
     p <- p + annotate("text", x=lab.posi[1], y=lab.posi[2], label=lab, size=lab.size)
   }
 
