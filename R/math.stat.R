@@ -254,7 +254,7 @@ confus.mat.quant <- function(..., index="tpr") {
 }
 
 
-get.roc1 <- function(x, pos, neg, x.names=NULL, ci=TRUE, msg=TRUE, ...) {
+get.roc1 <- function(x, pos, neg, x.names=NULL, ci=FALSE, msg=TRUE, ...) {
   # get ROC data or AUROC -- wrapper around pROC::roc
   # x is a vector of predictor score, where by default larger score corresponds to positive case
   # x needs to be named by the cases, otherwise provide the names in x.names
