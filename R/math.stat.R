@@ -254,9 +254,9 @@ confus.mat.quant <- function(..., index="tpr") {
 }
 
 
-get.roc1 <- function(x, pos, neg, x.names=NULL, ci=FALSE, msg=TRUE, ...) {
+get.roc1 <- function(x, pos, neg, x.names=NULL, dir=c(1,-1), ci=FALSE, msg=TRUE, ...) {
   # get ROC data or AUROC -- wrapper around pROC::roc
-  # x is a vector of predictor score, where by default larger score corresponds to positive case
+  # x is a vector of predictor score, where by default larger score corresponds to positive case (dir==1)
   # x needs to be named by the cases, otherwise provide the names in x.names
   # pos: a vector of the names of positive cases
   # neg: a vector of the names of negative cases
@@ -269,7 +269,9 @@ get.roc1 <- function(x, pos, neg, x.names=NULL, ci=FALSE, msg=TRUE, ...) {
   else if (is.null(names(x))) stop("x needs to be named.")
   pos <- pos[pos %in% names(x)]
   neg <- neg[neg %in% names(x)]
-  roc.obj <- pROC::roc(controls=x[neg], cases=x[pos], ci=TRUE, plot=FALSE, ...)
+  dir <- match.arg(as.character(dir))
+  dir <- switch(`1`="<", `-1`=">")
+  roc.obj <- pROC::roc(controls=x[neg], cases=x[pos], direction=dir, ci=TRUE, plot=FALSE, ...)
   if (msg) {
     print(roc.obj$auc)
     print(roc.obj$ci)
