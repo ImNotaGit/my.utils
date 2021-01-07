@@ -57,7 +57,7 @@ plot.roc <- function(dat, col="blue4", rev.lgd=FALSE, lgd.tit="theshold", lab=TR
   dat.xy <- as.data.table(pROC::coords(dat$roc, "all", transpose=FALSE))[order(-specificity, sensitivity)]
 
   p <- ggplot(dat.xy) + scale_x_reverse() +
-    xlab("1-Specificity") + ylab("Sensitivity") +
+    xlab("Specificity") + ylab("Sensitivity") +
     geom_abline(slope=1, intercept=1, linetype="dashed", alpha=0.7, size=0.2) +
     theme_classic() +
     theme(axis.title.y=element_text(size=14),
