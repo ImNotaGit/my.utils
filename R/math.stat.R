@@ -270,7 +270,7 @@ get.roc1 <- function(x, pos, neg, x.names=NULL, dir=c(1,-1), ci=FALSE, msg=TRUE,
   pos <- pos[pos %in% names(x)]
   neg <- neg[neg %in% names(x)]
   dir <- match.arg(as.character(dir[1]), c("1","-1"))
-  dir <- switch(`1`="<", `-1`=">")
+  dir <- switch(dir, `1`="<", `-1`=">")
   roc.obj <- pROC::roc(controls=x[neg], cases=x[pos], direction=dir, ci=TRUE, plot=FALSE, ...)
   if (msg) {
     print(roc.obj$auc)
