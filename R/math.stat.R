@@ -624,3 +624,56 @@ run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata
   run.f(f=coxph, dat=dat, model=model, coef=coef, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
 }
 
+get.survdiff.pval <- function(survdiff) {
+  # get p value from survival::survdiff result
+  # this function is copied from fastStat::survdiff_p.value
+
+  if (is.matrix(survdiff$obs)) {
+    otmp <- apply(survdiff$obs, 1, sum)
+    etmp <- apply(survdiff$exp, 1, sum)
+  } else {
+    otmp <- survdiff$obs
+    etmp <- survdiff$exp
+  }
+  df <- (etmp > 0)
+  if (sum(df) < 2) {
+    chi <- 0
+    return(1)
+  } else {
+    temp2 <- ((otmp - etmp)[df])[-1]
+    vv <- (survdiff$var[df, df])[-1, -1, drop = FALSE]
+    chi <- sum(solve(vv, temp2) * temp2)
+    survdiff.pvalue = 1 - pchisq(chi, length(temp2))
+    return(survdiff.pvalue)
+  }
+}
+
+run.survdiff <- function(dat, model = Surv(surv_days, surv_status) ~ x + y + strata(z), coef="x=levelx1, y=levely1", ..., keep.fit=FALSE) {
+  # perform a survival::survdiff test
+  # dat: a data.table containing covariates; model: formula for survdiff;
+  # coef: name of one particular row of the survdiff table; the "observed" and "expected" values in this row will be returned;
+  # the default values of model and coef are intended to be examples
+  # ...: additional variables for survival::survdiff
+  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the "observed" and "expected" values and p value
+
+  library(survival) # the package was imported but not attached; attach it if this function is called
+
+  res <- tryCatch({
+    fit <- survdiff(model, dat, ...)
+    i <- names(fit$n)==coef
+    if (!any(i)) stop("Invalid coef provided! Should be the name of a row of the survdiff summary table.")
+    if (is.matrix(fit$obs)) {
+      Exp <- sum(fit$exp[i,])
+      obs <- sum(fit$obs[i,])
+    } else {
+      Exp <- fit$exp[i]
+      obs <- fit$obs[i]
+    }
+    p <- get.survdiff.pval(fit)
+    res <- data.table(exp=Exp, obs=obs, pval=p)
+    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
+  }, error=function(e) {
+    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
+    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(exp=NA, obs=NA, pval=NA)
+  })
+}

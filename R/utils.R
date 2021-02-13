@@ -19,8 +19,9 @@ cn1 <- function(x, names.x) {
   x
 }
 
-
 unq <- function(x) unique(unlist(x))
+
+factor1 <- function(x) factor(x, levels=x)
 
 
 start.rmote <- function(id=1) {
