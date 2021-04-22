@@ -174,7 +174,8 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
     if (from=="symbol") from <- switch(species, hs="hgnc_symbol", mm="mgi_symbol")
     if (to=="symbol") to <- switch(species, hs="hgnc_symbol", mm="mgi_symbol")
     db <- switch(species, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl", species)
-    mart <- biomaRt::useMart(biomart="ensembl", dataset=db)
+    #mart <- biomaRt::useMart(biomart="ensembl", dataset=db)
+    mart <- biomaRt::useEnsembl(biomart="genes", dataset=db)
     mapp <- as.data.table(biomaRt::getBM(attributes=c(from, to), filters=from, values=x, mart=mart))
     setnames(mapp, c("from","to"))
   } else {
@@ -246,8 +247,10 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   if (to=="symbol") to <- switch(to.sp, hs="hgnc_symbol", mm="mgi_symbol")
   from.db <- switch(from.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl", from.sp)
   to.db <- switch(to.sp, hs="hsapiens_gene_ensembl", mm="mmusculus_gene_ensembl", to.sp)
-  from.mart <- biomaRt::useMart(biomart="ensembl", dataset=from.db)
-  to.mart <- biomaRt::useMart(biomart="ensembl", dataset=to.db)
+  #from.mart <- biomaRt::useMart(biomart="ensembl", dataset=from.db)
+  from.mart <- biomaRt::useEnsembl(biomart="genes", dataset=from.db)
+  #to.mart <- biomaRt::useMart(biomart="ensembl", dataset=to.db)
+  to.mart <- biomaRt::useEnsembl(biomart="genes", dataset=to.db)
   mapp <- as.data.table(biomaRt::getLDS(attributes=from, filters=from, values=x, mart=from.mart, attributesL=to, martL=to.mart))
   setnames(mapp, c("from","to"))
 
