@@ -1,12 +1,14 @@
 ## ----functions for quick data exploration and visualization----
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, alpha=0.8, center=TRUE, scale=TRUE, ...) {
+plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat of sample-by-variable
   # pc.x and pc.y: PC's to plot on the x any y axes
-  # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting
-  # color, shape, size, label can also be name lists of a single element, e.g. color=list(group=vector), then will use the list name in the ledgends
+  # data: data.table with the same number of rows as mat for additional variables of the samples
+  # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting, or column names in data if data is given
   # label.size: size of label text
-  # label.subset: a logical or index vector corresponding to label, the subset of samples to add label
+  # label.subset: a logical or index vector corresponding to label, or a character vector of a subset of labels; the subset of samples to add label
+  # label.outliers: whether or not to specifically label the ourliers in red text (independent of other labeling settings); for the label text, will use value in `label` if given, otherwise use rownames(mat); if rownames(mat)=NULL, will use row indices
+  # ourliers.cutoff: the alpha level for determining outliers with a Chi-Squared distribution of the Mahalanobis distances
   # alpha: a single alpha value for the plotting, not used as aes() for plotting
   # center, scale, ...: passed to prcomp()
 
@@ -24,26 +26,52 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, color=NULL, shape=NULL, size=NULL, lab
   varx <- sprintf("PC %d (%.2f%%)", pc.x, res$sdev[pc.x]^2 /tot.var*100)
   vary <- sprintf("PC %d (%.2f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
 
+  mat.pc <- cbind(x=res$x[, pc.x], y=res$x[, pc.y])
   dat <- data.table(x=res$x[, pc.x], y=res$x[, pc.y])
-  if (!is.list(color) && !is.null(color)) color <- list(color=color)
-  if (!is.list(shape) && !is.null(shape)) shape <- list(shape=shape)
-  if (!is.list(size) && !is.null(size)) size <- list(size=size)
-  if (!is.null(color)) dat[, c(names(color)):=color]
-  if (!is.null(shape)) dat[, c(names(shape)):=shape]
-  if (!is.null(size)) dat[, c(names(size)):=size]
-  p <- ggplot(dat, aes(x=x, y=y)) +
-    xlab(varx) + ylab(vary) +
-    geom_point(aes_string(color=names(color), shape=names(shape), size=names(size)), alpha=alpha) +
-    theme_classic()
-
-  if (!is.null(label)) {
-  	if (!is.null(label.subset)) {
-  	  if (is.logical(label.subset)) label.subset <- which(label.subset)
-  	  label[-label.subset] <- ""
-  	}
-  	p <- p + geom_text_repel(label=label, size=label.size)
+  if (!is.null(data)) {
+    if (nrow(data)!=nrow(dat)) stop("mat and data have different numbers of rows!")
+    dat <- cbind(dat, data)
+  }
+  if (!(length(color)==1 && color %in% names(dat) || is.null(color))) {
+    dat[, color:=color]
+    color <- "color"
+  }
+  if (!(length(shape)==1 && shape %in% names(dat) || is.null(shape))) {
+    dat[, shape:=shape]
+    shape <- "shape"
+  }
+  if (!(length(size)==1 && size %in% names(dat) || is.null(size))) {
+    dat[, size:=size]
+    size <- "size"
+  }
+  if (label.outliers && is.null(label)) {
+    if (is.null(rownames(mat))) label <- 1:nrow(mat) else label <- rownames(mat)
+  }
+  if (!(length(label)==1 && label %in% names(dat) || is.null(label))) {
+    dat[, label:=label]
+    label <- "label"
+  }
+  if (!is.null(label.subset)) {
+    if (is.logical(label.subset)) label.subset <- which(label.subset)
+    if (is.character(label.subset)) label.subset <- which(rownames(mat) %in% label.subset)
+  }
+  if (label.outliers) {
+    md <- mahalanobis(mat.pc, colMeans(mat.pc), cov(mat.pc))
+    cutoff <- qchisq(p=1-outliers.cutoff, df=ncol(mat.pc))
+    id.outliers <- which(md>cutoff)
+    label.subset <- union(label.subset, id.outliers)
   }
 
+  p <- ggplot(dat, aes(x=x, y=y)) +
+    xlab(varx) + ylab(vary) +
+    geom_point(aes_string(color=color, shape=shape, size=size), alpha=alpha) +
+    theme_classic()
+  if (!is.null(label)) {
+    if (is.null(label.subset)) label.subset <- 1:nrow(dat)
+    dat[, lab.color:="black"]
+    if (label.outliers && length(id.outliers)>0) dat[id.outliers, lab.color:="red2"]
+    p <- p + geom_text_repel(data=dat[label.subset], aes_string(label=label), color=dat[label.subset, lab.color], size=label.size)
+  }
   return(p)
 }
 
