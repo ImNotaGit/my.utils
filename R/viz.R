@@ -67,12 +67,14 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
     geom_point(aes_string(color=color, shape=shape, size=size), alpha=alpha) +
     theme_classic()
   if (!is.null(label)) {
-    if (is.null(label.subset)) label.subset <- 1:nrow(dat)
+    if (is.null(label.subset)) dat[, lab.flag:=TRUE] else dat[label.subset, lab.flag:=TRUE]
     dat[, lab.color:="black"]
     if (label.outliers && length(id.outliers)>0) dat[id.outliers, lab.color:="red2"]
-    p <- p + geom_text_repel(data=dat[label.subset], aes_string(label=label), color=dat[label.subset, lab.color], size=label.size)
+    p <- p + geom_text_repel(data=dat[lab.flag==TRUE], aes_string(label=label), color=dat[lab.flag==TRUE, lab.color], size=label.size)
   }
-  return(p)
+  print(p)
+
+  invisible(list(pca=res, plot.data=dat, plot=p))
 }
 
 
