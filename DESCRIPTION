@@ -36,6 +36,7 @@ Imports:
     affy,
     limma,
     edgeR,
+    DESeq2,
     fgsea,
     latex2exp
 Suggests:
