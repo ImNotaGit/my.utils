@@ -237,3 +237,38 @@ de.edger <- function(dat, pheno=NULL, model=~., design=NULL, coef, lfc.cutoff=0)
   res
 }
 
+
+de.deseq2 <- function(dat, pheno, model=~., coef, ...) {
+  # differential expression analysis with DESeq2
+  # dat: gene-by-sample expression matrix of raw counts; should have integer counts (if not then rounded) and have low genes already filtered out
+  # pheno: phenotypic data as a data.table with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # coef: passed to the contrast or name argument for DESeq2::results; can be character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed;
+  # e.g. if a continuous variable, pass a single name e.g. coef="age", if a categorical variable, pass a vector, sth like c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable
+  # ...: passed to DESeq2::results
+  
+  if (any(!is.wholenumber(dat))) {
+    message("DESeq2 only accepts integer read counts. There are non-integer values in `dat` and they have been rounded.")
+    dat <- round(dat)
+  }
+  pheno <- copy(as.data.table(pheno))
+  vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
+  vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
+  ccs <- complete.cases(pheno[, vs, with=FALSE])
+  if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+  dat <- dat[, ccs]
+  phe <- pheno[ccs]
+  tmp <- sapply(phe[, vs, with=FALSE], function(x) !is.numeric(x) & !is.factor(x))
+  if (any(tmp)) {
+    message("These non-numeric variables included in the model are not factors:")
+    message(cc(vs[tmp]))
+    message("They are converted to factors.")
+    phe[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
+  }
+  
+  dds <- DESeq2::DESeqDataSetFromMatrix(countData=dat, colData=phe, design=model)
+  dds1 <- DESeq2::DESeq(dds)
+  if (length(coef)==1) de.res <- DESeq2::results(dds1, name=coef, ...) else de.res <- DESeq2::results(dds1, contrast=coef, ...)
+  gid <- rownames(de.res)
+  de.res <- as.data.table(de.res)[, .(id=gid, ave.expr=baseMean, log.fc=log2FoldChange, lfc.se=lfcSE, pval=pvalue, padj=padj)]
+}
