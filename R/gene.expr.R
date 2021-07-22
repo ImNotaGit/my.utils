@@ -270,6 +270,8 @@ de.deseq2 <- function(dat, pheno=NULL, model=~., design=NULL, coef, ...) {
       phe[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
     }
     design <- model.matrix(model, phe)
+  } else {
+    if (is.null(pheno)) phe <- data.table(idx=1:ncol(dat)) else phe <- pheno
   }
   
   dds <- DESeq2::DESeqDataSetFromMatrix(countData=dat, colData=phe, design=design)
