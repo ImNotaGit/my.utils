@@ -278,5 +278,5 @@ de.deseq2 <- function(dat, pheno=NULL, model=~., design=NULL, coef, ...) {
   dds1 <- DESeq2::DESeq(dds)
   if (length(coef)==1) de.res <- DESeq2::results(dds1, name=coef, ...) else de.res <- DESeq2::results(dds1, contrast=coef, ...)
   gid <- rownames(de.res)
-  de.res <- as.data.table(de.res)[, .(id=gid, ave.expr=baseMean, log.fc=log2FoldChange, lfc.se=lfcSE, pval=pvalue, padj=padj)]
+  de.res <- as.data.table(de.res)[, .(id=gid, ave.expr=baseMean, log.fc=log2FoldChange, lfc.se=lfcSE, pval=pvalue, padj=padj)][order(padj, pval)]
 }
