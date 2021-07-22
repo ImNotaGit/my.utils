@@ -678,3 +678,35 @@ run.survdiff <- function(dat, model = Surv(surv_days, surv_status) ~ x + y + str
     if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(exp=NA, obs=NA, pval=NA)
   })
 }
+
+
+simple.nested.model.matrix <- function(dat, a, b) {
+  # create a proper model matrix for a simple nested design in the form of ~a/b
+  # a and b should be both categorical, a should have two levels, b should have multiple levels, nested within a
+  # control-treatment contrast will be used for a and sum contrast will be used for b
+  # a common scenario for this is a control-treatment experimental design, with control and treatment groups containing multiple independent individuals (i.e. the individuals in the control and treatment groups are different), and there are replicated data points for each individual;
+  # then the coefficient associated with the second column of the model matrix created by this function will be the treatment effect vs control: mean(mean of each treated individual) - mean(mean of each control individual)
+  # this is a replacement of model.matrix(~ dat$a / dat$b), since the latter often cannot handle this properly
+  # dat: a data.frame or data.table containing the relevant covariates
+  # a, b: character, names of the variables within dat to form the ~a/b model; dat$a and dat$b should not contain NA
+  
+  dat <- as.data.table(dat)[, .(a=get(a), b=get(b))]
+  if (any(!complete.cases(dat))) stop("Please remove NA's in the provided variables.")
+  la <- levels(factor(dat$a))
+  lb <- list(dat[a==la[1], unique(b)], dat[a==la[2], unique(b)])
+  names(lb) <- la
+  mat <- cbind(1, dat[, ifelse(a==la[1], 0, 1)])
+  colnames(mat) <- c("(Intercept)", paste0(a,la[2]))
+  for (ai in la) {
+    for (bi in lb[[ai]][-1]) {
+      xi <- dat[, matrix(ifelse(a!=ai, 0, ifelse(b==bi, 1, ifelse(b==lb[[ai]][1], -1, 0))), ncol=1)]
+      colnames(xi) <- paste0(a,ai,":",b,bi)
+      mat <- cbind(mat, xi)
+    }
+  }
+  rownames(mat) <- 1:nrow(mat)
+  tmp <- list("contr.treatment", "contr.sum")
+  names(tmp) <- c(a, b)
+  attr(mat, "contrasts") <- tmp
+  mat
+}
