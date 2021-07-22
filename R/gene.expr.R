@@ -244,8 +244,8 @@ de.deseq2 <- function(dat, pheno=NULL, model=~., design=NULL, coef, ...) {
   # pheno: phenotypic data as a data.table with the same order of samples
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot be both NULL
-  # coef: passed to the contrast or name argument for DESeq2::results; can be character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed;
-  # e.g. if a continuous variable, pass a single name e.g. coef="age", if a categorical variable, pass a vector, sth like c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable
+  # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
+  # coef is passed to the name argument (if coef has length 1) or the contrasts argument (if coef has length >1) for DESeq2::results; for the latter, e.g. coef=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable
   # ...: passed to DESeq2::results
   
   if (any(!is.wholenumber(dat))) {
