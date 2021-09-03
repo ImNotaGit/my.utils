@@ -551,7 +551,7 @@ run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fi
   tryCatch({
     fit <- do.call(f, args)
     tmp <- coef(summary(fit))
-    res <- data.table(coef=tmp[coef, colnames(tmp) %in% c("Estimate","coef")], pval=tmp[coef, colnames(tmp) %in% c("Pr(>|t|)","Pr(>|z|)")])
+    res <- data.table(coef=tmp[coef, colnames(tmp) %in% c("Estimate","coef")], se=tmp[coef, colnames(tmp) %in% c("Std. Error","se(coef)")], pval=tmp[coef, colnames(tmp) %in% c("Pr(>|t|)","Pr(>|z|)")])
     # "anova-like" test if required
     if (drop.test!="none") {
       tmp <- drop1(fit, as.formula(paste("~",drop)), test=drop.test)
@@ -560,7 +560,7 @@ run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fi
     if (keep.fit) list(fitted.model=fit, summary.table=res) else res
   }, error=function(e) {
     warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
-    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(coef=NA, pval=NA)
+    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, se=NA, pval=NA)) else data.table(coef=NA, se=NA, pval=NA)
   })
 }
 
