@@ -177,7 +177,7 @@ apply1 <- function(dat, f, an="x", ..., nc=1L) {
 
   cl <- makeCluster(nc, type="FORK")
   res <- rbindlist(parApply(cl, dat, 1, function(x) {
-    args[[an]] <- x
+    args$dat[[an]] <- x
     do.call(f, args)
   }), idcol="id")
   stopCluster(cl)
