@@ -7,6 +7,11 @@ jaccard <- function(a, b) {
   uniqueN(intersect(a, b)) / uniqueN(union(a, b))
 }
 
+dmode <- function(x, ...) {
+  # get the mode from the density estimation of a vector of continuous values
+  d <- density(x, na.rm=TRUE, ...)
+  d$x[which.max(d$y)]
+}
 
 qrank <- function(vec) {
   # covert a numeric vector to quantile rank. if there's NA, keep it as it is.
