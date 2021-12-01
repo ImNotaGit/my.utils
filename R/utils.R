@@ -285,3 +285,27 @@ convert.gset.species <- function(gs, from="hs", to="mm") {
   })
 }
 
+
+qlapply <- function(f, ..., pkgs=c(), njobs, mem=16, config=list(P="short"), fail_on_error=FALSE) {
+  # paralleled lapply of function f with clustermq::Q
+  # first item in ... should be the variable to iterate over, named by the corresponding argument name of f; the names of the returned list will be equal to names(list(...)[[1]])
+  # other items in ... should be either other constant arguments passed to f or variables to be exported to f (i.e. those not defined within f)
+  # mem is memory per job in G; could also specify in config as list(mem=xx, ...), in which case the mem argument will be ignored
+  # the names "P" and "mem" used in config correspond to my current template in use (data/.clustermq.sge.tmpl)
+
+  l <- list(...)
+  x <- l[1]
+  l <- l[-1]
+  fargs <- formalArgs(f)
+  const <- l[names(l) %in% fargs]
+  export <- l[!names(l) %in% fargs]
+  if (missing(njobs)) njobs <- min(length(x[[1]]), 100)
+  if (!"mem" %in% names(config)) config$mem <- mem # the name "mem" used in config correspond to my current template in use (data/.clustermq.sge.tmpl)
+  args <- c(x, list(fun=f, const=const, export=export, pkgs=pkgs, n_jobs=njobs, template=config, fail_on_error=fail_on_error))
+  res <- do.call(clustermq::Q, args=args)
+  names(res) <- names(x[[1]])
+  res
+}
+
+
+

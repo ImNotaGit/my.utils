@@ -1,0 +1,23 @@
+#$ -cwd -V
+
+## Job name
+#$ -N {{ job_name }}
+
+## Combining output/error messages into one file
+#$ -j y
+## Log file
+#$ -o {{ log_file | /dev/null }}
+
+## Project (short, normal, long, etc.)
+#$ -P {{ P }}
+
+## n_jobs as array -- required
+#$ -t 1-{{ n_jobs }}
+
+## Memory
+#$ -l mem_reserve={{ mem }}G
+#$ -l mem_free={{ mem }}G
+#$ -l h_vmem={{ mem }}G
+#$ -l virtual_free={{ mem }}G
+
+CMQ_AUTH={{ auth }} R --no-save --no-restore -e 'clustermq:::worker("{{ master }}")'

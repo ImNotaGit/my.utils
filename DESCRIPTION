@@ -20,14 +20,16 @@ Depends:
     furrr,
     ggplot2,
     ggrepel,
-    ggpubr
+    ggpubr,
+    latex2exp
 Imports:
     survival,
     pROC,
     PRROC,
     rms,
     lmerTest,
-    ordinal,
+    ordinal
+Suggests:
     GenomicFeatures,
     GenomicRanges,
     IRanges,
@@ -38,6 +40,5 @@ Imports:
     edgeR,
     DESeq2,
     fgsea,
-    latex2exp
-Suggests:
+    clustermq,
     rmote
