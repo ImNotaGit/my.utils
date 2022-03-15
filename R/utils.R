@@ -24,12 +24,14 @@ unq <- function(x) unique(unlist(x))
 factor1 <- function(x) factor(x, levels=x)
 
 
-start.rmote <- function(id=1) {
+start.rmote <- function(port=4321) {
   # start rmote server
-  rmote::start_rmote(port=as.numeric(env(co("PORT",id))))
+  rmote::start_rmote(port=port)
 }
 
 stop.rmote <- rmote::stop_rmote
+
+pd <- rmote::plot_done()
 
 
 hh <- function(x, nr=5, nc=nr) {

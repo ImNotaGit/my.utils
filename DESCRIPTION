@@ -21,6 +21,7 @@ Depends:
     ggplot2,
     ggrepel,
     ggpubr,
+    cowplot,
     latex2exp
 Imports:
     survival,
