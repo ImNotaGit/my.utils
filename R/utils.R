@@ -31,7 +31,7 @@ start.rmote <- function(port=4321) {
 
 stop.rmote <- rmote::stop_rmote
 
-pd <- rmote::plot_done()
+pd <- rmote::plot_done
 
 
 hh <- function(x, nr=5, nc=nr) {
