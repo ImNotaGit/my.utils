@@ -24,14 +24,21 @@ unq <- function(x) unique(unlist(x))
 factor1 <- function(x) factor(x, levels=x)
 
 
-start.rmote <- function(port=4321) {
+rmt <- function(port=4321, ...) {
   # start rmote server
-  rmote::start_rmote(port=port)
+  rmote::start_rmote(port=port, ...)
 }
 
-stop.rmote <- rmote::stop_rmote
+rmt0 <- rmote::stop_rmote
 
 pd <- rmote::plot_done
+
+hgd <- function(port=4321, token=FALSE, ...) {
+  # start httpgd server
+  httpgd::hgd(port=port, token=token, ...)
+}
+
+hgd0 <- httpgd::hgd_close
 
 
 hh <- function(x, nr=5, nc=nr) {
