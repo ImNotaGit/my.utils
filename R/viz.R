@@ -1,5 +1,20 @@
 ## ----functions for quick data exploration and visualization----
 
+
+my.cols <- function(x) {
+  # my custom list of easily distinguishable colors for categorical variables with potentially many levels
+  cols <- c("#295ED4", "#FF7F00", "#E31A1C", "#008B00", "#6A3D9A", "#FFD700", "#FF1493", "#66CD00", "#8B4500", "#7F7F7F", "#00FFFF", "#FFFF00", "#FF7D7D", "#ADFF2F", "#AB82FF", "#D2B48C", "#FFACFD", "#CD853F", "#D9D9D9", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#00FF7F", "#FFE4C4", "#FF4500", "#CD96CD")
+  if (missing(x)) return(cols)
+  if (length(x)==1 && is.wholenumber(x)) {
+    if (x>length(cols)) stop(sprintf("%d colors are available while you asked for %d", length(cols), x))
+    return(cols[1:x])
+  } else {
+    if (length(x)>length(cols)) stop(sprintf("%d colors are available while you asked for %d.", length(cols), length(x)))
+    return(cn1(cols[1:length(x)], x))
+  }
+}
+
+
 plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat of sample-by-variable
   # pc.x and pc.y: PC's to plot on the x any y axes
