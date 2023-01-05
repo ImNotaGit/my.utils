@@ -3,15 +3,28 @@
 
 my.cols <- function(x) {
   # my custom list of easily distinguishable colors for categorical variables with potentially many levels
-  cols <- c("#295ED4", "#FF7F00", "#E31A1C", "#008B00", "#6A3D9A", "#FFD700", "#FF1493", "#66CD00", "#8B4500", "#7F7F7F", "#00FFFF", "#FFFF00", "#FF7D7D", "#ADFF2F", "#AB82FF", "#D2B48C", "#FFACFD", "#CD853F", "#D9D9D9", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#00FF7F", "#FFE4C4", "#FF4500", "#CD96CD")
+  # note: order not optimized yet
+  cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#D9D9D9", "#00FF7F", "#FF1493", "#FFD700", "#7F7F7F", "#66CD00", "#FF7F00", "#FF7D7D", "#ADFF2F", "#AB82FF", "#D2B48C", "#CD853F", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#FFE4C4", "#FF4500", "#CD96CD")
   if (missing(x)) return(cols)
-  if (length(x)==1 && is.wholenumber(x)) {
+  if (length(x)==1 && is.numeric(x) && is.wholenumber(x)) {
     if (x>length(cols)) stop(sprintf("%d colors are available while you asked for %d", length(cols), x))
     return(cols[1:x])
   } else {
     if (length(x)>length(cols)) stop(sprintf("%d colors are available while you asked for %d.", length(cols), length(x)))
     return(cn1(cols[1:length(x)], x))
   }
+}
+
+
+subchunkify <- function(p, w, h, ...) {
+  # function to create sub-chunks within normal chunks for plots with modified sizes in Rmd documents
+  # note: other non-subchunkified plots in the parent chunk may not be produced at the correct position (i.e. messed-up order), so if using subchunkify, then all plots within the parent chunk should be subchunkified;
+  # additional chunk options like `message=FALSE`, etc. can be provided in ..., however it seems that in order for this to work, the parent chunk should also have the same options set; subchunks w/o these options can override the parent chunk options
+  p.deparsed <- paste0(deparse(function() {p}), collapse="")
+  more.args <- deparse(c(...))
+  if (more.args=="NULL") more.args <- "" else more.args <- stringr::str_sub(more.args, 3, -2)
+  sub.chunk <- sprintf("\n```{r sub_chunk_%d, fig.width=%s, fig.height=%s, echo=FALSE, %s}\n(%s)()\n```\n", floor(runif(1)*1e4), w, h, more.args, p.deparsed)
+  cat(trimws(knitr::knit(text=knitr::knit_expand(text=sub.chunk), quiet=TRUE)))
 }
 
 
