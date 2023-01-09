@@ -16,14 +16,15 @@ my.cols <- function(x) {
 }
 
 
-subchunkify <- function(p, w, h, ...) {
+subchunkify <- function(p, w, h, nm=NULL, ...) {
   # function to create sub-chunks within normal chunks for plots with modified sizes in Rmd documents
   # note: other non-subchunkified plots in the parent chunk may not be produced at the correct position (i.e. messed-up order), so if using subchunkify, then all plots within the parent chunk should be subchunkified;
   # additional chunk options like `message=FALSE`, etc. can be provided in ..., however it seems that in order for this to work, the parent chunk should also have the same options set; subchunks w/o these options can override the parent chunk options
   p.deparsed <- paste0(deparse(function() {p}), collapse="")
   more.args <- deparse(c(...))
   if (more.args=="NULL") more.args <- "" else more.args <- stringr::str_sub(more.args, 3, -2)
-  sub.chunk <- sprintf("\n```{r sub_chunk_%d, fig.width=%s, fig.height=%s, echo=FALSE, %s}\n(%s)()\n```\n", floor(runif(1)*1e4), w, h, more.args, p.deparsed)
+  if (is.null(nm)) nm <- sprintf("subchunk_%d", floor(runif(1)*1e6)) else nm <- paste0("subchunk_", nm)
+  sub.chunk <- sprintf("\n```{r %s, fig.width=%s, fig.height=%s, echo=FALSE, %s}\n(%s)()\n```\n", nm, w, h, more.args, p.deparsed)
   cat(trimws(knitr::knit(text=knitr::knit_expand(text=sub.chunk), quiet=TRUE)))
 }
 
