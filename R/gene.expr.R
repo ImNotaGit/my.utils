@@ -206,7 +206,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 }
 
 
-de.edger <- function(dat, pheno=NULL, model=~., design=NULL, coef, lfc.cutoff=0) {
+de.edger <- function(dat, pheno=NULL, model=~., design=NULL, coef, lfc.cutoff=0, robust=FALSE, ...) {
   # differential expression analysis with edgeR
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.frame with the same order of samples
@@ -229,7 +229,7 @@ de.edger <- function(dat, pheno=NULL, model=~., design=NULL, coef, lfc.cutoff=0)
   dge <- edgeR::calcNormFactors(dge)
   dge <- edgeR::estimateDisp(dge, design)
 
-  fit <- edgeR::glmQLFit(dge, design)
+  fit <- edgeR::glmQLFit(dge, design, robust=robust, ...)
   if (lfc.cutoff==0) test.res <- edgeR::glmQLFTest(fit, coef=coef) else test.res <- edgeR::glmTreat(fit, coef=coef, lfc=lfc.cutoff)
   res <- edgeR::topTags(test.res, n=Inf)[[1]]
   res <- cbind(id=row.names(res), as.data.table(res))
