@@ -196,6 +196,25 @@ rm.low.genes <- function(dat, rm.low.frac.gt=0.5, count.cutoff=10) {
 }
 
 
+rm.low.genes.sr <- function(dat, rm.low.frac.gt=0.5, low.cutoff=0, assay="RNA", slot=c("counts","data","scale.data"), renormalize=TRUE, ...) {
+  # remove genes with low expression from a Seurat object, based on data in the specified assay and slot
+  # renormalize: whether to renormalize the assay with Seurat::NormalizeData
+  # ...: passed to Seurat::NormalizeData
+
+  if (!requireNamespace("Seurat", quietly=TRUE)) {
+    stop("Package \"Seurat\" needed for this function to work.")
+  }
+  library(Seurat)
+
+  slot <- match.arg(slot)
+  keep <- Matrix::rowMeans(GetAssayData(dat, assay=assay, slot=slot)<=low.cutoff) <= rm.low.frac.gt
+  message(sum(keep), " rows (genes/transcripts) remaining.")
+  res <- subset(dat, features=rownames(dat[[assay]])[keep])
+  if (renormalize) res <- NormalizeData(res, ...)
+  res
+}
+
+
 get.tmm.log.cpm <- function(dat, prior.count=1) {
   # get log2(cpm+1) values with edgeR (TMM-normalized), from raw counts
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
@@ -280,3 +299,205 @@ de.deseq2 <- function(dat, pheno=NULL, model=~., design=NULL, coef, ...) {
   gid <- rownames(de.res)
   de.res <- as.data.table(de.res)[, .(id=gid, ave.expr=baseMean, log.fc=log2FoldChange, lfc.se=lfcSE, pval=pvalue, padj=padj)][order(padj, pval)]
 }
+
+
+de.gampoi <- function(dat, pheno, model=~., design, coef, size.factors, pseudobulk=NULL, return.fit=FALSE, ...) {
+  # differential expression analysis with glmGamPoi, this may be used for single-cell RNA-seq data
+  # dat: gene-by-sample expression matrix of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
+  # pheno: phenotypic data as a data.table with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
+  # coef: a single character passed to glmGamPoi::test_de `contrast`, e.g. can be the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group; or a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
+  # size.factors: passed to glmGamPoi::glm_gp `size_factors`, if missing use the default "normed_sum"
+  # pseudobulk: passed to glmGamPoi::test_de `pseudobulk_by`
+  # return.fit: if TRUE, return list(fit=fit, de.res=de.res), where fit is the output from glmGamPoi::glm_gp; otherwise return de.res
+  # ...: passed to glmGamPoi::glm_gp
+  
+  if (!requireNamespace("glmGamPoi", quietly=TRUE)) {
+    stop("Package \"glmGamPoi\" needed for this function to work.")
+  }
+
+  if (missing(size.factors)) size.factors <- "normed_sum"
+
+  if (missing(design)) {
+    if (missing(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
+    pheno <- copy(as.data.table(pheno))
+    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
+    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
+    ccs <- complete.cases(pheno[, vs, with=FALSE])
+    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+    dat <- dat[, ccs]
+    phe <- pheno[ccs]
+    tmp <- sapply(phe[, vs, with=FALSE], function(x) !is.numeric(x) & !is.factor(x))
+    if (any(tmp)) {
+      message("These non-numeric variables included in the model are not factors:")
+      message(cc(vs[tmp]))
+      message("They are converted to factors.")
+      phe[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
+    }
+    design <- model.matrix(model, phe)
+  }
+  
+  fit <- glmGamPoi::glm_gp(as.matrix(dat), design=design, size_factors=size.factors, ...)
+  de.res <- as.data.table(glmGamPoi::test_de(fit, contrast=coef, pseudobulk_by=pseudobulk))[order(adj_pval, pval), .(id=name, log.fc=lfc, F=f_statistic, pval, padj=adj_pval)]
+
+  if (return.fit) list(fit=fit, de.res=de.res) else de.res
+}
+
+
+de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, pos.only=FALSE, lfc.only=FALSE, nc=1L, return.fit=FALSE, ...) {
+  # differential expression analysis with MAST, used for e.g. single-cell RNA-seq data
+  # dat: gene-by-sample expression matrix (assuming sparse) of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
+  # pheno: phenotypic data as a data.table with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
+  # cdr: whether to include cellular detection rate (i.e. fraction of >0 genes in each cell) as a covariate
+  # coef: a single character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group; or a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
+  # lfc.cutoff: a non-negative number, lower cutoff for log fold-change (will return genes whose log fold-change >= this value); if set >0, the P values will no longer be valid
+  # pos.only: if TRUE, will return genes with log fold-change >= lfc.cutoff; otherwise, return genes with abs(log fold-change) >= lfc.cutoff
+  # *note: I include lfc.cutoff and pos.only arguments here (rather than downstream) because I want to filter genes before doing LR test to save time (if p values are needed)
+  # lfc.only: if TRUE, will return only log fold-change without p values
+  # nc: number of cores to use for multi-core parallelization
+  # return.fit: if TRUE, return list(fit=zlm.fit, summ=zlm.summ, de.res=de.res), where zlm.fit is the output from MAST::zlm, and zlm.summ if the output from summary(zlm.fit); otherwise return de.res
+  # ...: passed to MAST::zlm
+
+  if (!requireNamespace("MAST", quietly=TRUE)) {
+    stop("Package \"MAST\" (GitHub fork: ImNotaGit/MAST) needed for this function to work.")
+  }
+
+  if (missing(design)) {
+    if (missing(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
+    #vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
+    #vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
+    vs <- all.vars(model)
+    if ("." %in% vs) vs <- unique(c(setdiff(vs, "."), names(pheno)))
+    ccs <- complete.cases(pheno[, vs, with=FALSE])
+    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+    dat <- dat[, ccs]
+    cdat <- pheno[ccs]
+    if (cdr) {
+      cdat <- cbind(cdat, cdr_=Matrix::colMeans(dat>0))
+      model <- update(model, ~.+cdr_)
+    }
+  } else {
+    if (!missing(pheno)) message("`design` was provided, ignoring `pheno` and `model`.")
+    colnames(design) <- make.names(colnames(design))
+    if (cdr) design <- cbind(design, cdr_=Matrix::colMeans(dat>0))
+    #model <- ~.+0 # doesn't work
+    model <- as.formula(sprintf("~ %s + 0", paste(sprintf("`%s`", colnames(design)), collapse=" + ")))
+    cdat <- design
+  }
+  
+  sca <- MAST::FromMatrix(exprsArray=as.matrix(dat),
+    cData=cbind(data.frame(wellKey=colnames(dat), row.names=colnames(dat)), cdat),
+    fData=data.frame(primerid=rownames(dat), row.names=rownames(dat)),
+    check_sanity=FALSE)
+  
+  nc.bak <- options("mc.cores")$mc.cores
+  if (nc>1) options(mc.cores=nc)
+  zlm.fit <- MAST::zlm(formula=model, sca=sca, parallel=isTRUE(nc>1), ...)
+  
+  if (is.character(coef)) {
+    if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
+    coef <- make.names(coef)
+    c0 <- setNames(ifelse(colnames(design)==make.names("(Intercept)"), 1, 0), colnames(design))
+    c1 <- as.matrix(setNames(ifelse(colnames(design)==coef, 1, 0), colnames(design)))
+    colnames(c1) <- coef
+    # add intercept to c1
+    c1 <- c1 + c0
+    args.getlfc <- list(contrast0=c0, contrast1=c1)
+    args.lrt <- list(hypothesis=MAST::CoefficientHypothesis(coef))
+    coef1 <- coef
+  } else if (is.list(coef)) {
+    coef <- lapply(coef, function(x) setNames(x, make.names(names(x))))
+    c0 <- as.matrix(coef[[1]])
+    c1 <- as.matrix(coef[[2]])[rownames(c0), , drop=FALSE]
+    colnames(c0) <- colnames(c1) <- "x"
+    args.getlfc <- list(contrast0=coef[[1]], contrast1=c1)
+    args.lrt <- list(hypothesis=c1-c0)
+    coef1 <- "x"
+  }
+  
+  if (lfc.cutoff>0 || pos.only) {
+    # pre-filtering genes before doing statistical tests to save time
+    if (lfc.cutoff>0 && !lfc.only) warning("Filtering genes based on log fold-change, P values no longer valid.")
+    if (pos.only) gidx <- do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc))[contrast==coef1, logFC>=lfc.cutoff] else gidx <- do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc))[contrast==coef1, abs(logFC)>=lfc.cutoff]
+    gidx[is.na(gidx)] <- FALSE
+    if (sum(gidx)==0) {
+      warning("No gene passes log fold-change cutoff, NULL returned.")
+      return(NULL)
+    }
+    for (i in slotNames(zlm.fit)) {
+      si <- slot(zlm.fit, i)
+      if (is.array(si)) {
+        if (is.matrix(si)) slot(zlm.fit, i) <- si[gidx, , drop=FALSE] else slot(zlm.fit, i) <- si[, , gidx, drop=FALSE]
+      }
+    }
+    zlm.fit@sca <- zlm.fit@sca[gidx, ]
+  }
+  
+  if (lfc.only) {
+    zlm.summ <- MAST::summary(zlm.fit, logFC=do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc)), doLRT=FALSE)$datatable
+    if (nc>1) options(mc.cores=nc.bak) # reset
+    # discrete component (logistic)
+    de.res <- zlm.summ[contrast==coef1 & component=='D', .(id=primerid, coef.d=coef, ci95lo.d=ci.lo, ci95up.d=ci.hi)]
+    # continuous component
+    tmp <- zlm.summ[contrast==coef1 & component=='C', .(id=primerid, coef.c=coef, ci95lo.c=ci.lo, ci95up.c=ci.hi)]
+    de.res <- merge(de.res, tmp, by="id")
+    # logFC
+    tmp <- zlm.summ[contrast==coef1 & component=='logFC', .(id=primerid, log.fc=coef, ci95lo.lfc=ci.lo, ci95up.lfc=ci.hi)]
+    de.res <- merge(de.res, tmp, by="id")
+  } else {
+    zlm.summ <- MAST::summary(zlm.fit, logFC=do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc)), doLRT=setNames(list(do.call(MAST::lrTest, c(list(object=zlm.fit), args.lrt))), coef1), parallel=isTRUE(nc>1))$datatable
+    if (nc>1) options(mc.cores=NULL) # reset
+    # discrete component (logistic)
+    de.res <- zlm.summ[contrast==coef1 & component=='D', .(id=primerid, coef.d=coef, ci95lo.d=ci.lo, ci95up.d=ci.hi, pval.d=`Pr(>Chisq)`)][, padj.d:=p.adjust(pval.d, "BH")]
+    # continuous component
+    tmp <- zlm.summ[contrast==coef1 & component=='C', .(id=primerid, coef.c=coef, ci95lo.c=ci.lo, ci95up.c=ci.hi, pval.c=`Pr(>Chisq)`)][, padj.c:=p.adjust(pval.c, "BH")]
+    de.res <- merge(de.res, tmp, by="id")
+    # logFC
+    tmp <- merge(
+      zlm.summ[contrast==coef1 & component=='logFC', .(id=primerid, log.fc=coef, ci95lo.lfc=ci.lo, ci95up.lfc=ci.hi)],
+      zlm.summ[contrast==coef1 & component=='H', .(id=primerid, pval=`Pr(>Chisq)`)][, padj:=p.adjust(pval, "BH")],
+      by="id"
+    )
+    de.res <- merge(de.res, tmp, by="id")
+  }
+  #de.res <- de.res[order(-abs(log.fc))]
+  de.res <- de.res[order(padj, pval)]
+  if (return.fit) list(fit=zlm.fit, summ=zlm.summ, de.res=de.res) else de.res
+}
+
+
+make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
+  # create pseudobulk gene expression data for single-cell RNA-seq
+  # mat: gene-by-cell matrix (assuming sparse)
+  # mdat: cell meta data, data.frame or other objects coerceable to data.table
+  # blk: names of one or more sample/bulk variables (as in column names of mdat)
+  # ncells.cutoff: only keep samples/bulks with > this number of cells
+  # return: list(mat=mat, mdat=mdat), where mat is the pseudobulk gene-by-sample/bulk matrix, mdat is the corresponding meta data for the pseudobulk samples, the latter is obtained by dropping any variables (columns) with non-unique values within a bulk from the original cell-level mdat
+
+  mdat <- as.data.table(mdat)
+  tmp <- sapply(blk, function(i) anyNA(mdat[, i, with=FALSE]))
+  if (any(tmp)) warning(sprintf("These bulk variables contain NA! NA will be kept as a separate level:\n%s\n", paste(blk[tmp], collapse=", ")))
+  blk <- do.call(paste, c(unname(mdat[, blk, with=FALSE]), sep="_"))
+  tmp <- table(blk)>ncells.cutoff
+  if (any(!tmp)) {
+    idx <- blk %in% names(tmp)[tmp]
+    warning(sprintf("These bulks contain <=%d cell, they will be discarded:\n%s\n", ncells.cutoff, paste(names(tmp)[!tmp], collapse=", ")))
+    blk <- blk[idx]
+    mdat <- mdat[idx]
+    mat <- mat[, idx, drop=FALSE]
+  }
+  blk <- factor(blk)
+  tmp <- Matrix::sparseMatrix(i=1:length(blk), j=as.numeric(blk), dims=c(length(blk), length(levels(blk))), dimnames=list(NULL, levels(blk)))
+  mat <- as.matrix(mat %*% tmp)
+  tmp <- sapply(mdat, function(x) any(colSums(table(x, blk)>0)>1))
+  if (any(tmp)) message(sprintf("These variables will be dropped since they have multiple values/levels within a bulk:\n%s\n", paste(names(mdat)[tmp], collapse=", "))
+)
+  mdat[, blk:=blk]
+  mdat <- unique(mdat[, !tmp, with=FALSE])[match(colnames(mat), blk), -"blk"]
+  list(mat=mat, mdat=mdat)
+}
+
+

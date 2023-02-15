@@ -24,6 +24,7 @@ Depends:
     cowplot,
     latex2exp
 Imports:
+    Matrix,
     survival,
     pROC,
     PRROC,
@@ -40,7 +41,9 @@ Suggests:
     limma,
     edgeR,
     DESeq2,
+    MAST,
+    Seurat,
     fgsea,
     clustermq,
     rmote,
-	httpgd
+    httpgd
