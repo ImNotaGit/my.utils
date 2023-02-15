@@ -162,28 +162,3 @@ trans4m.eset <- function(eset, method=inv.norm, by=21) {
 }
 
 
-apply1 <- function(dat, f, an="x", ..., nc=1L) {
-  # dat is an eset or just a gene(feature)-by-sample matrix; apply function f to each gene/feature, being passed to the argument of f named an;
-  # if dat is an eset, dat$pheno will be passed to the argument of f named "dat"; provide additional arguments to f in ...;
-  # nc: number of cores
-  # output of f should be a data.table containing some statistical test results for each gene/feature; one of the column should be "pval" (or contain substring "pval") for p value
-  # will rbind all f outputs, adding an "id" column of gene/feature name (using the rownames of dat or dat$expr), add BH-adjusted p value with adjust.pval() then order by padj as output
-
-  args <- list(...)
-  if (is.list(dat) && all(c("expr","pheno") %in% names(dat))) {
-    args$dat <- dat$pheno
-    dat <- dat$expr
-  }
-
-  cl <- makeCluster(nc, type="FORK")
-  res <- rbindlist(parApply(cl, dat, 1, function(x) {
-    args$dat[[an]] <- x
-    do.call(f, args)
-  }), idcol="id")
-  stopCluster(cl)
-
-  res <- adjust.pval(res)
-  res[order(padj, pval)]
-}
-
-

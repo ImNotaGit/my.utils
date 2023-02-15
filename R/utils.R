@@ -317,4 +317,24 @@ qlapply <- function(f, ..., pkgs=c(), njobs, mem=16, config=list(P="short"), fai
 }
 
 
+apply1 <- function(dat, pheno, f, ..., var.name="x", nc=1L) {
+  # dat is a gene(feature)-by-sample matrix; pheno is a data.table of sample-level covariates; this function will apply a function f (one of the run.* functions) for certain statistical testing to each gene/feature
+  # each gene/feature will be cbind-ed with pheno with column name var.name, and the resulting data will be passed to the "dat" argument of f; provide additional arguments to f in ...
+  # this function will rbind all f outputs, adding an "id" column of gene/feature name (using the rownames of dat or dat$expr), add BH-adjusted p value with adjust.pval() then order by padj as output
+  # nc: number of cores
+
+  args <- list(...)
+  args$dat <- copy(pheno)
+
+  cl <- makeCluster(nc, type="FORK")
+  res <- rbindlist(parApply(cl, dat, 1, function(x) {
+    args$dat[[var.name]] <- x
+    do.call(f, args)
+  }), idcol="id")
+  stopCluster(cl)
+
+  res <- adjust.pval(res)
+  res[order(padj, pval)]
+}
+
 
