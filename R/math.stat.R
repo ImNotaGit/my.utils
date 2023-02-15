@@ -542,7 +542,7 @@ gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
   x <- dat[[x]]
   names(x) <- dat[[id]]
   set.seed(seed)
-  res <- fgsea::fgsea(pathways=gsets, stats=x, nperm=1e4, ...)
+  res <- fgsea::fgsea(pathways=gsets, stats=x, ...)
   res[order(padj,pval)]
 }
 
