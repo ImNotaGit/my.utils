@@ -170,6 +170,8 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
   dat <- rbindlist(lapply(l, data.table), idcol="group")
   dat[, group:=factor(group, levels=unique(group))] # specify levels to keep the original order as in ...
   setnames(dat, "V1", "value")
+  grps <- levels(dat$group)
+  xlabs <- dat[, .(n=.N), by=group][match(grps, group), sprintf("%s\nn=%d", group, n)]
 
   addm <- function(x, a) (1+a)*max(x[is.finite(x)])+(-a)*min(x[is.finite(x)])
   # if there are only 2 or 3 groups, do wilcoxon test for each pair of groups
@@ -196,7 +198,7 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
   # plot summary
   formaty <- function(y) sprintf("%.2g", y)
   p <- ggplot(dat, aes(x=group, y=value)) +
-    #scale_x_discrete(name=stat.out) +
+    scale_x_discrete(labels=xlabs) +
     scale_y_continuous(name=ylab, labels=formaty)
   if (any(c("jitter","j") %in% geoms)) {
     if (any(c("violin","v","box","b") %in% geoms)) p <- p + geom_jitter(aes(color=group), size=0.8, width=0.15, height=0.02, alpha=0.4)
