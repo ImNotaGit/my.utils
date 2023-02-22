@@ -95,8 +95,8 @@ voom <- function(dat, pheno=NULL, model=~., design=NULL, quantile=FALSE, ...) {
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.frame with the same order of samples; model: the model to be used for downstream DE; together with pheno, this will be used to generate the design matrix passed to limma::voom
   # or provide design matrix in design; if both pheno and design are NULL, then design will be NULL
-  # quantile: whether to apply quantile normalization, if TRUE, will pass normalize.method="quantile" to limma::voom
-  # ...: passed to limma::voom
+  # quantile: whether to apply quantile normalization, if TRUE, will pass normalize.method="quantile" to limma::voom; this will be ignored if `normalize.method` is specified in ...
+  # ...: passed to edgeR::calcNormFactors (e.g. `method`) and limma::voom
   # return a list(voom, design, genes), where voom is the limma::voom() output, i.e. an EList object, design is the design matrix, and genes is rownames(dat)
 
   if (!is.null(pheno)) {
@@ -111,10 +111,16 @@ voom <- function(dat, pheno=NULL, model=~., design=NULL, quantile=FALSE, ...) {
   gs <- rownames(dat)
   
   dat <- edgeR::DGEList(counts=dat)
-  dat <- edgeR::calcNormFactors(dat)
-  if (quantile) nm <- "quantile" else nm <- "none"
-  v <- limma::voom(counts=dat, design=design, normalize.method=nm, ...)
-  res <- list(voom=v, design=design, genes=gs)
+  dat <- pass3dots(edgeR::calcNormFactors.DGEList, dat, ...)
+
+  if ("normalize.method" %in% names(list(...))) {
+    v <- pass3dots(limma::voom, counts=dat, design=design, ...)
+  } else {
+    if (quantile) nm <- "quantile" else nm <- "none"
+    v <- pass3dots(limma::voom, counts=dat, design=design, normalize.method=nm, ...)
+  }
+
+  list(voom=v, design=design, genes=gs)
 }
 
 de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, reduced.model, contr.to.coef=FALSE, gene.colname=TRUE, keep.fit=FALSE, ...) {
