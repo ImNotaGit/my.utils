@@ -117,14 +117,21 @@ voom <- function(dat, pheno=NULL, model=~., design=NULL, quantile=FALSE, ...) {
   res <- list(voom=v, design=design, genes=gs)
 }
 
-de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, robust=FALSE, trend=FALSE, gene.colname=TRUE) {
+de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, reduced.model, contr.to.coef=FALSE, robust=FALSE, trend=FALSE, gene.colname=TRUE, keep.fit=FALSE, ...) {
   # differential expression analysis with limma
-  # dat: either a matrix (of gene-by-sample) or an ExpressionSet object, or output from voom()
-  # pheno: phenotypic data as a data.frame with the same order of samples; model: the linear model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms); these two will be used to compute the design matrix
-  # or provide design matrix in design, pheno and design cannot both be NULL, unless if dat is output from voom() then will use the design matrix saved in there, and pheno, model and design will be ignored
-  # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
+  # pheno: phenotypic data as a data.table with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # design: design matrix for DE
+  # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # robust, trend: parameters for limma eBayes, set to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods is recommended)
   # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if TRUE then will try to get gene symbols automatically from fData(dat); if FALSE then will not try to get gene symbols; gene symbols will be added to the returned DE table
+  # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
+  # ...: passed to limma::lmFit
 
   if (class(dat)=="ExpressionSet") {
     mat <- exprs(dat)
@@ -153,25 +160,46 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, robust=FALSE,
     if (!is.null(design)) message("Using the design matrix saved in `dat`, ignoring `pheno` and `model`, if provided.")
   }
 
-  if (is.null(design)) {
-    if (is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
-    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
-    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
-    ccs <- complete.cases(pheno[, vs, with=FALSE])
-    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
-    if (is.matrix(mat)) mat <- mat[, ccs]
-    phe <- pheno[ccs]
-    design <- model.matrix(model, phe)
+  pars <- .process.de.params(dat=mat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
+
+  if (!contr.to.coef) {
+    fit <- limma::lmFit(pars$dat, design=pars$design, ...)
+    if (!is.null(pars$contrast)) {
+      pars$coef <- lapply(pars$contrast, function(x) if (is.matrix(x)) 1:ncol(x) else 1)
+      tmp <- mapply(function(contrast, coef) {
+        fit <- limma::contrasts.fit(fit, contrast)
+        fit <- limma::eBayes(fit, robust=robust, trend=trend)
+        de.res <- tryCatch(limma::topTable(fit, coef=coef, number=Inf, genelist=gns), error=function(e) limma::topTable(fit, coef=coef, number=Inf))
+        list(fit=fit, de.res=de.res)
+      }, pars$contrast, pars$coef, SIMPLIFY=FALSE)
+      fit <- lapply(tmp, function(x) x$fit)
+      de.res <- lapply(tmp, function(x) x$de.res)
+    } else if (!is.null(pars$coef)) {
+      fit <- limma::eBayes(fit, robust=robust, trend=trend)
+      de.res <- lapply(pars$coef, function(x) {
+        tryCatch(limma::topTable(fit, coef=x, number=Inf, genelist=gns), error=function(e) limma::topTable(fit, coef=x, number=Inf))
+      })
+    }
+  } else {
+    tmp <- mapply(function(design, coef) {
+      fit <- limma::lmFit(pars$dat, design=design, ...)
+      fit <- limma::eBayes(fit, robust=robust, trend=trend)
+      de.res <- tryCatch(limma::topTable(fit, coef=coef, number=Inf, genelist=gns), error=function(e) limma::topTable(fit, coef=coef, number=Inf))
+      list(fit=fit, de.res=de.res)
+    }, pars$design, pars$coef, SIMPLIFY=FALSE)
+    fit <- lapply(tmp, function(x) x$fit)
+    de.res <- lapply(tmp, function(x) x$de.res)
   }
-  
-  fit <- limma::lmFit(mat, design=design)
-  fit <- limma::eBayes(fit, robust=robust, trend=trend)
-  res <- tryCatch(limma::topTable(fit, coef=coef, number=Inf, genelist=gns),
-                  error=function(e) limma::topTable(fit, coef=coef, number=Inf))
-  if (!"id" %in% tolower(names(res))) res <- cbind(ID=row.names(res), res)
-  res <- as.data.table(res)
-  setnames(res, c("ID","logFC","AveExpr","P.Value","adj.P.Val"), c("id","log.fc","ave.expr","pval","padj"), skip_absent=TRUE)
-  res
+
+  de.res <- lapply(de.res, function(x) {
+    res <- as.data.table(x)
+    if (!"id" %in% tolower(names(res))) res <- cbind(ID=row.names(res), res)
+    setnames(res, c("ID","logFC","AveExpr","P.Value","adj.P.Val"), c("id","log.fc","ave.expr","pval","padj"), skip_absent=TRUE)
+    res[order(padj, pval)]
+  })
+
+  if (length(de.res)==1) de.res <- de.res[[1]]
+  if (keep.fit) list(fit=fit, de.res=de.res) else de.res
 }
 
 de <- de.limma
@@ -225,123 +253,248 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 }
 
 
-de.edger <- function(dat, pheno=NULL, model=~., design=NULL, coef, lfc.cutoff=0, robust=FALSE, ...) {
-  # differential expression analysis with edgeR
-  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
-  # pheno: phenotypic data as a data.frame with the same order of samples
-  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
-  # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot be both NULL
-  # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
+.process.de.params <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE) {
 
-  if (is.null(design)) {
-    if (is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
+  if (missing(design) || is.null(design)) {
+    if (missing(pheno) || is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
     vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
     vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
     ccs <- complete.cases(pheno[, vs, with=FALSE])
-    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
-    dat <- dat[, ccs]
-    phe <- pheno[ccs]
-    design <- model.matrix(model, phe)
-  }
-  
-  dge <- edgeR::DGEList(counts=dat)
-  dge <- edgeR::calcNormFactors(dge)
-  dge <- edgeR::estimateDisp(dge, design)
-
-  fit <- edgeR::glmQLFit(dge, design, robust=robust, ...)
-  if (lfc.cutoff==0) test.res <- edgeR::glmQLFTest(fit, coef=coef) else test.res <- edgeR::glmTreat(fit, coef=coef, lfc=lfc.cutoff)
-  res <- edgeR::topTags(test.res, n=Inf)[[1]]
-  res <- cbind(id=row.names(res), as.data.table(res))
-  setnames(res, c("logFC","logCPM","PValue","FDR"), c("log.fc","log.cpm","pval","padj"), skip_absent=TRUE)
-  res
-}
-
-
-de.deseq2 <- function(dat, pheno=NULL, model=~., design=NULL, coef, ...) {
-  # differential expression analysis with DESeq2
-  # dat: gene-by-sample expression matrix of raw counts; should have integer counts (if not then rounded) and have low genes already filtered out
-  # pheno: phenotypic data as a data.table with the same order of samples
-  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
-  # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot be both NULL
-  # coef: character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "gender" with two levels "female" and "male" with "female" being the reference level, then we may use coef="gendermale"
-  # coef is passed to the name argument (if coef has length 1) or the contrasts argument (if coef has length >1) for DESeq2::results; for the latter, e.g. coef=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable
-  # ...: passed to DESeq2::results
-  
-  if (any(!is.wholenumber(dat))) {
-    message("DESeq2 only accepts integer read counts. There are non-integer values in `dat` and they have been rounded.")
-    dat <- round(dat)
-  }
-  
-  if (is.null(design)) {
-    if (is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
-    pheno <- copy(as.data.table(pheno))
-    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
-    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
-    ccs <- complete.cases(pheno[, vs, with=FALSE])
-    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
-    dat <- dat[, ccs]
-    phe <- pheno[ccs]
-    tmp <- sapply(phe[, vs, with=FALSE], function(x) !is.numeric(x) & !is.factor(x))
+    if (any(!ccs)) {
+      dat <- dat[, ccs]
+      pheno <- pheno[ccs]
+      message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+    } else pheno <- copy(pheno)
+    tmp <- sapply(pheno[, vs, with=FALSE], function(x) !is.numeric(x) & !is.factor(x))
     if (any(tmp)) {
       message("These non-numeric variables included in the model are not factors:")
       message(cc(vs[tmp]))
       message("They are converted to factors.")
-      phe[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
+      pheno[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
     }
-    design <- model.matrix(model, phe)
+    design <- model.matrix(model, pheno)
+    red.mod.fml.ok <- TRUE
   } else {
-    if (is.null(pheno)) phe <- data.table(idx=1:ncol(dat)) else phe <- pheno
+    if (!(missing(pheno) || is.null(pheno))) {
+      warning("Both `pheno` with `model` and `design` are provided, will use `design` and ignore `pheno` with `model`")
+    } else pheno <- NULL
+    red.mod.fml.ok <- FALSE
   }
-  
-  dds <- DESeq2::DESeqDataSetFromMatrix(countData=dat, colData=phe, design=design)
-  dds1 <- DESeq2::DESeq(dds)
-  if (length(coef)==1) de.res <- DESeq2::results(dds1, name=coef, ...) else de.res <- DESeq2::results(dds1, contrast=coef, ...)
-  gid <- rownames(de.res)
-  de.res <- as.data.table(de.res)[, .(id=gid, ave.expr=baseMean, log.fc=log2FoldChange, lfc.se=lfcSE, pval=pvalue, padj=padj)][order(padj, pval)]
+
+  if (!(missing(reduced.model) || is.null(reduced.model))) {
+    if (!(missing(contrast) || is.null(contrast)) || !(missing(coef) || is.null(coef))) {
+      warning("`reduced.model` is provided, will ignore `contrast` and `coef`.")
+      contrast <- coef <- NULL
+    }
+    if (!is.list(reduced.model)) reduced.model <- list(reduced.model)
+    coef <- lapply(reduced.model, function(x) {
+      if (class(x)=="formula") {
+        if (!red.mod.fml.ok) stop("Not using `pheno` with `model`, `reduced.model` can only be a single or a list of numeric/character vectors.")
+        setdiff(colnames(design), colnames(model.matrix(x, pheno)))
+      } else if (is.character(x)) {
+        setdiff(colnames(design), x)
+      } else if (is.numeric(x)) {
+        colnames(design)[-x]
+      } else stop("Invalid `reduced.model`, should be a single or a list of formulae or numeric/character vectors.")
+    })
+  }
+
+  if (!(missing(contrast) || is.null(contrast))) {
+    if (!is.list(contrast)) contrast <- list(contrast)
+    contrast <- lapply(contrast, function(x) {
+      if (is.character(x)) limma::makeContrasts(contrasts=x, levels=design) else x
+    })
+    if (contr.to.coef) {
+      message("Reforming design matrix with limma::contrastAsCoef such that contrasts become coefficients.")
+      tmp <- lapply(contrast, function(x) {
+        tmp <- limma::contrastAsCoef(design, x)
+        list(design=tmp$design, coef=tmp$coef)
+      })
+      design <- lapply(tmp, function(x) x$design)
+      coef <- lapply(tmp, function(x) x$coef)
+    }
+  } else contrast <- NULL
+
+  if (missing(coef) || is.null(coef)) stop("No `coef`, `contrast`, or `reduced.model` was provided.")
+
+  list(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast)
 }
 
 
-de.gampoi <- function(dat, pheno, model=~., design, coef, size.factors, pseudobulk=NULL, return.fit=FALSE, ...) {
+de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, lfc.cutoff=0, robust=FALSE, keep.fit=FALSE, ...) {
+  # differential expression analysis with edgeR
+  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+  # pheno: phenotypic data as a data.table with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # design: design matrix for DE
+  # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
+  # robust and ...: passed to edgeR::glmQLFit
+  # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
+
+  if (!requireNamespace("edgeR", quietly=TRUE)) {
+    stop("Package \"edgeR\" needed for this function to work.")
+  }
+
+  pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
+  dge <- edgeR::DGEList(counts=pars$dat)
+  dge <- edgeR::calcNormFactors(dge)
+
+  if (!contr.to.coef) {
+    dge <- edgeR::estimateDisp(dge, pars$design)
+    fit <- edgeR::glmQLFit(dge, pars$design, robust=robust, ...)
+    if (lfc.cutoff==0) {
+      if (!is.null(pars$contrast)) {
+        de.res <- lapply(pars$contrast, function(x) edgeR::glmQLFTest(fit, contrast=x))
+      } else if (!is.null(pars$coef)) {
+        de.res <- lapply(pars$coef, function(x) edgeR::glmQLFTest(fit, coef=x))
+      }
+    } else {
+      if (!is.null(pars$contrast)) {
+        de.res <- lapply(pars$contrast, function(x) edgeR::glmTreat(fit, contrast=x, lfc=lfc.cutoff))
+      } else if (!is.null(pars$coef)) {
+        de.res <- lapply(pars$coef, function(x) edgeR::glmTreat(fit, coef=x, lfc=lfc.cutoff))
+      }
+    }
+  } else {
+    tmp <- mapply(function(design, coef) {
+      dge <- edgeR::estimateDisp(dge, design)
+      fit <- edgeR::glmQLFit(dge, design, robust=robust, ...)
+      if (lfc.cutoff==0) de.res <- edgeR::glmQLFTest(fit, coef=coef) else de.res <- edgeR::glmTreat(fit, coef=coef, lfc=lfc.cutoff)
+      list(fit=fit, de.res=de.res)
+    }, pars$design, pars$coef, SIMPLIFY=FALSE)
+    fit <- lapply(tmp, function(x) x$fit)
+    de.res <- lapply(tmp, function(x) x$de.res)
+  }
+
+  de.res <- lapply(de.res, function(x) {
+    tmp <- edgeR::topTags(x, n=Inf)[[1]]
+    res <- cbind(id=row.names(tmp), as.data.table(tmp))
+    setnames(res, c("logFC","logCPM","PValue","FDR"), c("log.fc","log.cpm","pval","padj"), skip_absent=TRUE)
+    setnames(res, stringr::str_replace_all(names(res), "logFC", "log.fc"))
+    res[order(padj, pval)]
+  })
+
+  if (length(de.res)==1) de.res <- de.res[[1]]
+  if (keep.fit) list(fit=fit, de.res=de.res) else de.res
+}
+
+
+de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, keep.fit=FALSE, nc=1L, ...) {
+  # differential expression analysis with DESeq2
+  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+  # pheno: phenotypic data as a data.table with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # design: design matrix for DE
+  # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
+  # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
+  # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
+  # nc: number of cores for parallelization
+  # ...: passed to DESeq2::results
+
+  if (!requireNamespace(c("DESeq2","BiocParallel"), quietly=TRUE)) {
+    stop("Packages \"DESeq2\" and \"BiocParallel\" needed for this function to work.")
+  }
+
+  if (any(!is.wholenumber(dat))) {
+    message("DESeq2 only accepts integer read counts. There are non-integer values in `dat` and they have been rounded.")
+    dat <- round(dat)
+  }
+
+  pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
+  if (is.null(pars$pheno)) pars$pheno <- data.table(idx=1:ncol(pars$dat))
+  if (nc>1) bp <- BiocParallel::MulticoreParam(workers=nc, progressbar=TRUE, RNGseed=0) else bp <- BiocParallel::bpparam()
+
+  if (!contr.to.coef) {
+    dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=pars$design)
+    fit <- DESeq2::DESeq(dds, parallel=nc>1, BPPARAM=bp)
+    if (!is.null(pars$contrast)) {
+      de.res <- lapply(pars$contrast, function(x) DESeq2::results(fit, contrast=x, parallel=nc>1, BPPARAM=bp, ...))
+    } else if (!is.null(pars$coef)) {
+      de.res <- lapply(pars$coef, function(x) DESeq2::results(fit, name=x, parallel=nc>1, BPPARAM=bp, ...))
+    }
+  } else {
+    tmp <- mapply(function(design, coef) {
+      dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=design)
+      fit <- DESeq2::DESeq(dds, parallel=nc>1, BPPARAM=bp)
+      de.res <- DESeq2::results(fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
+      list(fit=fit, de.res=de.res)
+    }, pars$design, pars$coef, SIMPLIFY=FALSE)
+    fit <- lapply(tmp, function(x) x$fit)
+    de.res <- lapply(tmp, function(x) x$de.res)
+  }
+
+  de.res <- lapply(de.res, function(x) {
+    res <- cbind(id=row.names(x), as.data.table(x))
+    setnames(res, c("baseMean","log2FoldChange","lfcSE","pvalue"), c("ave.expr","log.fc","lfc.se","pval"), skip_absent=TRUE)
+    res[order(padj, pval)]
+  })
+
+  if (length(de.res)==1) de.res <- de.res[[1]]
+  if (keep.fit) list(fit=fit, de.res=de.res) else de.res
+}
+
+
+de.gampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, size.factors, pseudobulk=NULL, keep.fit=FALSE, ...) {
   # differential expression analysis with glmGamPoi, this may be used for single-cell RNA-seq data
   # dat: gene-by-sample expression matrix of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
   # pheno: phenotypic data as a data.table with the same order of samples
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
-  # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
-  # coef: a single character passed to glmGamPoi::test_de `contrast`, e.g. can be the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group; or a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
+  # design: design matrix for DE
+  # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
+  # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # size.factors: passed to glmGamPoi::glm_gp `size_factors`, if missing use the default "normed_sum"
   # pseudobulk: passed to glmGamPoi::test_de `pseudobulk_by`
-  # return.fit: if TRUE, return list(fit=fit, de.res=de.res), where fit is the output from glmGamPoi::glm_gp; otherwise return de.res
+  # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
+  # nc: number of cores for parallelization
   # ...: passed to glmGamPoi::glm_gp
-  
+
   if (!requireNamespace("glmGamPoi", quietly=TRUE)) {
     stop("Package \"glmGamPoi\" needed for this function to work.")
   }
 
   if (missing(size.factors)) size.factors <- "normed_sum"
 
-  if (missing(design)) {
-    if (missing(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
-    pheno <- copy(as.data.table(pheno))
-    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
-    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
-    ccs <- complete.cases(pheno[, vs, with=FALSE])
-    if (any(!ccs)) message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
-    dat <- dat[, ccs]
-    phe <- pheno[ccs]
-    tmp <- sapply(phe[, vs, with=FALSE], function(x) !is.numeric(x) & !is.factor(x))
-    if (any(tmp)) {
-      message("These non-numeric variables included in the model are not factors:")
-      message(cc(vs[tmp]))
-      message("They are converted to factors.")
-      phe[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
+  pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
+  if (!contr.to.coef) {
+    fit <- glmGamPoi::glm_gp(as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...)
+    if (!is.null(pars$contrast)) {
+      de.res <- lapply(pars$contrast, function(x) glmGamPoi::test_de(fit, contrast=x, pseudobulk_by=pseudobulk))
+    } else if (!is.null(pars$coef)) {
+      de.res <- lapply(pars$coef, function(x) glmGamPoi::test_de(fit, contrast=x, pseudobulk_by=pseudobulk))
     }
-    design <- model.matrix(model, phe)
+  } else {
+    tmp <- mapply(function(design, coef) {
+      fit <- glmGamPoi::glm_gp(as.matrix(pars$dat), design=design, size_factors=size.factors, ...)
+      de.res <- glmGamPoi::test_de(fit, contrast=coef, pseudobulk_by=pseudobulk)
+      list(fit=fit, de.res=de.res)
+    }, pars$design, pars$coef, SIMPLIFY=FALSE)
+    fit <- lapply(tmp, function(x) x$fit)
+    de.res <- lapply(tmp, function(x) x$de.res)
   }
-  
-  fit <- glmGamPoi::glm_gp(as.matrix(dat), design=design, size_factors=size.factors, ...)
-  de.res <- as.data.table(glmGamPoi::test_de(fit, contrast=coef, pseudobulk_by=pseudobulk))[order(adj_pval, pval), .(id=name, log.fc=lfc, F=f_statistic, pval, padj=adj_pval)]
 
-  if (return.fit) list(fit=fit, de.res=de.res) else de.res
+  de.res <- lapply(de.res, function(x) {
+    res <- as.data.table(x)
+    setnames(res, c("name","lfc","f_statistic","adj_pval"), c("id","log.fc","F","padj"), skip_absent=TRUE)
+    res[order(padj, pval)]
+  })
+
+  if (length(de.res)==1) de.res <- de.res[[1]]
+  if (keep.fit) list(fit=fit, de.res=de.res) else de.res
 }
 
 
@@ -352,7 +505,9 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
   # cdr: whether to include cellular detection rate (i.e. fraction of >0 genes in each cell) as a covariate
-  # coef: a single character, the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group; or a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
+  # coef: character vector of model coefficients to test for and to return, e.g. each can be the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group;
+  # or a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
+  # if length of coef is >1, the returned de.res will be a list of DE result tables named by coef; otherwise de.res will be a single table
   # lfc.cutoff: a non-negative number, lower cutoff for log fold-change (will return genes whose log fold-change >= this value); if set >0, the P values will no longer be valid
   # pos.only: if TRUE, will return genes with log fold-change >= lfc.cutoff; otherwise, return genes with abs(log fold-change) >= lfc.cutoff
   # *note: I include lfc.cutoff and pos.only arguments here (rather than downstream) because I want to filter genes before doing LR test to save time (if p values are needed)
