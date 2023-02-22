@@ -117,7 +117,7 @@ voom <- function(dat, pheno=NULL, model=~., design=NULL, quantile=FALSE, ...) {
   res <- list(voom=v, design=design, genes=gs)
 }
 
-de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, reduced.model, contr.to.coef=FALSE, robust=FALSE, trend=FALSE, gene.colname=TRUE, keep.fit=FALSE, ...) {
+de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, reduced.model, contr.to.coef=FALSE, gene.colname=TRUE, keep.fit=FALSE, ...) {
   # differential expression analysis with limma
   # pheno: phenotypic data as a data.table with the same order of samples
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
@@ -128,10 +128,9 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
-  # robust, trend: parameters for limma eBayes, set to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods is recommended)
   # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if TRUE then will try to get gene symbols automatically from fData(dat); if FALSE then will not try to get gene symbols; gene symbols will be added to the returned DE table
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
-  # ...: passed to limma::lmFit
+  # ...: passed to limma::lmFit, limma::eBayes and limma::topTable, e.g. `robust` and `trend` for limma::eBayes, set these to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods can be more recommended)
 
   if (class(dat)=="ExpressionSet") {
     mat <- exprs(dat)
@@ -163,28 +162,28 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   pars <- .process.de.params(dat=mat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
 
   if (!contr.to.coef) {
-    fit <- limma::lmFit(pars$dat, design=pars$design, ...)
+    fit <- pass3dots(limma::lmFit, pars$dat, design=pars$design, ...)
     if (!is.null(pars$contrast)) {
       pars$coef <- lapply(pars$contrast, function(x) if (is.matrix(x)) 1:ncol(x) else 1)
       tmp <- mapply(function(contrast, coef) {
         fit <- limma::contrasts.fit(fit, contrast)
-        fit <- limma::eBayes(fit, robust=robust, trend=trend)
-        de.res <- tryCatch(limma::topTable(fit, coef=coef, number=Inf, genelist=gns), error=function(e) limma::topTable(fit, coef=coef, number=Inf))
+        fit <- pass3dots(limma::eBayes, fit, ...)
+        de.res <- tryCatch(pass3dots(limma::topTable, fit, coef=coef, number=Inf, genelist=gns, ...), error=function(e) pass3dots(limma::topTable, fit, coef=coef, number=Inf, ...))
         list(fit=fit, de.res=de.res)
       }, pars$contrast, pars$coef, SIMPLIFY=FALSE)
       fit <- lapply(tmp, function(x) x$fit)
       de.res <- lapply(tmp, function(x) x$de.res)
     } else if (!is.null(pars$coef)) {
-      fit <- limma::eBayes(fit, robust=robust, trend=trend)
+      fit <- pass3dots(limma::eBayes, fit, ...)
       de.res <- lapply(pars$coef, function(x) {
-        tryCatch(limma::topTable(fit, coef=x, number=Inf, genelist=gns), error=function(e) limma::topTable(fit, coef=x, number=Inf))
+        tryCatch(pass3dots(limma::topTable, fit, coef=x, number=Inf, genelist=gns, ...), error=function(e) pass3dots(limma::topTable, fit, coef=x, number=Inf, ...))
       })
     }
   } else {
     tmp <- mapply(function(design, coef) {
-      fit <- limma::lmFit(pars$dat, design=design, ...)
-      fit <- limma::eBayes(fit, robust=robust, trend=trend)
-      de.res <- tryCatch(limma::topTable(fit, coef=coef, number=Inf, genelist=gns), error=function(e) limma::topTable(fit, coef=coef, number=Inf))
+      fit <- pass3dots(limma::lmFit, pars$dat, design=design, ...)
+      fit <- pass3dots(limma::eBayes, fit, ...)
+      de.res <- tryCatch(pass3dots(limma::topTable, fit, coef=coef, number=Inf, genelist=gns, ...), error=function(e) pass3dots(limma::topTable, fit, coef=coef, number=Inf, ...))
       list(fit=fit, de.res=de.res)
     }, pars$design, pars$coef, SIMPLIFY=FALSE)
     fit <- lapply(tmp, function(x) x$fit)
@@ -321,7 +320,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 }
 
 
-de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, lfc.cutoff=0, robust=FALSE, keep.fit=FALSE, ...) {
+de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, lfc.cutoff=0, keep.fit=FALSE, ...) {
   # differential expression analysis with edgeR
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.table with the same order of samples
@@ -333,8 +332,8 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
   # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
-  # robust and ...: passed to edgeR::glmQLFit
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
+  # ...: any possible additional arguments of calcNormFactors, estimateDisp, glmQLFit, glmQLFTest, and glmTreat, e.g. `method` for calcNormFactors, `trend.method` for estimateDisp, `robust` for estimateDisp and glmQLFit (somewhat different meanings in both but may as well be set identically), `abundance.trend` for glmQLFit, etc.
 
   if (!requireNamespace("edgeR", quietly=TRUE)) {
     stop("Package \"edgeR\" needed for this function to work.")
@@ -342,29 +341,29 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
 
   pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
   dge <- edgeR::DGEList(counts=pars$dat)
-  dge <- edgeR::calcNormFactors(dge)
+  dge <- pass3dots(edgeR::calcNormFactors.DGEList, dge, ...)
 
   if (!contr.to.coef) {
-    dge <- edgeR::estimateDisp(dge, pars$design)
-    fit <- edgeR::glmQLFit(dge, pars$design, robust=robust, ...)
+    dge <- pass3dots(edgeR::estimateDisp.DGEList, dge, pars$design, ...)
+    fit <- pass3dots(edgeR::glmQLFit.DGEList, dge, pars$design, ...)
     if (lfc.cutoff==0) {
       if (!is.null(pars$contrast)) {
-        de.res <- lapply(pars$contrast, function(x) edgeR::glmQLFTest(fit, contrast=x))
+        de.res <- lapply(pars$contrast, function(x) pass3dots(edgeR::glmQLFTest, fit, contrast=x, ...))
       } else if (!is.null(pars$coef)) {
-        de.res <- lapply(pars$coef, function(x) edgeR::glmQLFTest(fit, coef=x))
+        de.res <- lapply(pars$coef, function(x) pass3dots(edgeR::glmQLFTest, fit, coef=x, ...))
       }
     } else {
       if (!is.null(pars$contrast)) {
-        de.res <- lapply(pars$contrast, function(x) edgeR::glmTreat(fit, contrast=x, lfc=lfc.cutoff))
+        de.res <- lapply(pars$contrast, function(x) pass3dots(edgeR::glmTreat, fit, contrast=x, lfc=lfc.cutoff, ...))
       } else if (!is.null(pars$coef)) {
-        de.res <- lapply(pars$coef, function(x) edgeR::glmTreat(fit, coef=x, lfc=lfc.cutoff))
+        de.res <- lapply(pars$coef, function(x) pass3dots(edgeR::glmTreat, fit, coef=x, lfc=lfc.cutoff, ...))
       }
     }
   } else {
     tmp <- mapply(function(design, coef) {
-      dge <- edgeR::estimateDisp(dge, design)
-      fit <- edgeR::glmQLFit(dge, design, robust=robust, ...)
-      if (lfc.cutoff==0) de.res <- edgeR::glmQLFTest(fit, coef=coef) else de.res <- edgeR::glmTreat(fit, coef=coef, lfc=lfc.cutoff)
+      dge <- pass3dots(edgeR::estimateDisp.DGEList, dge, design, ...)
+      fit <- pass3dots(edgeR::glmQLFit.DGEList, dge, design, ...)
+      if (lfc.cutoff==0) de.res <- pass3dots(edgeR::glmQLFTest, fit, coef=coef, ...) else de.res <- pass3dots(edgeR::glmTreat, fit, coef=coef, lfc=lfc.cutoff, ...)
       list(fit=fit, de.res=de.res)
     }, pars$design, pars$coef, SIMPLIFY=FALSE)
     fit <- lapply(tmp, function(x) x$fit)
@@ -399,7 +398,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
   # nc: number of cores for parallelization
-  # ...: passed to DESeq2::results
+  # ...: passed to DESeq2::DESeq and DESeq2::results
 
   if (!requireNamespace(c("DESeq2","BiocParallel"), quietly=TRUE)) {
     stop("Packages \"DESeq2\" and \"BiocParallel\" needed for this function to work.")
@@ -416,17 +415,17 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
 
   if (!contr.to.coef) {
     dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=pars$design)
-    fit <- DESeq2::DESeq(dds, parallel=nc>1, BPPARAM=bp)
+    fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
     if (!is.null(pars$contrast)) {
-      de.res <- lapply(pars$contrast, function(x) DESeq2::results(fit, contrast=x, parallel=nc>1, BPPARAM=bp, ...))
+      de.res <- lapply(pars$contrast, function(x) pass3dots(DESeq2::results, fit, contrast=x, parallel=nc>1, BPPARAM=bp, ...))
     } else if (!is.null(pars$coef)) {
-      de.res <- lapply(pars$coef, function(x) DESeq2::results(fit, name=x, parallel=nc>1, BPPARAM=bp, ...))
+      de.res <- lapply(pars$coef, function(x) pass3dots(DESeq2::results, fit, name=x, parallel=nc>1, BPPARAM=bp, ...))
     }
   } else {
     tmp <- mapply(function(design, coef) {
       dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=design)
-      fit <- DESeq2::DESeq(dds, parallel=nc>1, BPPARAM=bp)
-      de.res <- DESeq2::results(fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
+      fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
+      de.res <- pass3dots(DESeq2::results, fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
       list(fit=fit, de.res=de.res)
     }, pars$design, pars$coef, SIMPLIFY=FALSE)
     fit <- lapply(tmp, function(x) x$fit)
@@ -444,7 +443,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
 }
 
 
-de.gampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, size.factors, pseudobulk=NULL, keep.fit=FALSE, ...) {
+de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, size.factors, pseudobulk=NULL, keep.fit=FALSE, ...) {
   # differential expression analysis with glmGamPoi, this may be used for single-cell RNA-seq data
   # dat: gene-by-sample expression matrix of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
   # pheno: phenotypic data as a data.table with the same order of samples
@@ -461,7 +460,7 @@ de.gampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   # pseudobulk: passed to glmGamPoi::test_de `pseudobulk_by`
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
   # nc: number of cores for parallelization
-  # ...: passed to glmGamPoi::glm_gp
+  # ...: passed to glmGamPoi::glm_gp and glmGamPoi::test_de
 
   if (!requireNamespace("glmGamPoi", quietly=TRUE)) {
     stop("Package \"glmGamPoi\" needed for this function to work.")
@@ -471,16 +470,16 @@ de.gampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
 
   pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
   if (!contr.to.coef) {
-    fit <- glmGamPoi::glm_gp(as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...)
+    fit <- pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...)
     if (!is.null(pars$contrast)) {
-      de.res <- lapply(pars$contrast, function(x) glmGamPoi::test_de(fit, contrast=x, pseudobulk_by=pseudobulk))
+      de.res <- lapply(pars$contrast, function(x) pass3dots(glmGamPoi::test_de, fit, contrast=x, pseudobulk_by=pseudobulk, ...))
     } else if (!is.null(pars$coef)) {
-      de.res <- lapply(pars$coef, function(x) glmGamPoi::test_de(fit, contrast=x, pseudobulk_by=pseudobulk))
+      de.res <- lapply(pars$coef, function(x) pass3dots(glmGamPoi::test_de, fit, contrast=x, pseudobulk_by=pseudobulk, ...))
     }
   } else {
     tmp <- mapply(function(design, coef) {
-      fit <- glmGamPoi::glm_gp(as.matrix(pars$dat), design=design, size_factors=size.factors, ...)
-      de.res <- glmGamPoi::test_de(fit, contrast=coef, pseudobulk_by=pseudobulk)
+      fit <- pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=design, size_factors=size.factors, ...)
+      de.res <- pass3dots(glmGamPoi::test_de, fit, contrast=coef, pseudobulk_by=pseudobulk, ...)
       list(fit=fit, de.res=de.res)
     }, pars$design, pars$coef, SIMPLIFY=FALSE)
     fit <- lapply(tmp, function(x) x$fit)

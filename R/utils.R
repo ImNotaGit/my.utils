@@ -339,3 +339,13 @@ apply1 <- function(dat, pheno, f, ..., var.name="y", arg.name="dat", nc=1L) {
 }
 
 
+pass3dots <- function(f, ...) {
+  # this is a helper function useful for when one defines a custom function with the ... argument, and desires to automatically pass the relevant subsets of arguments inside ... to different function calls inside this user-defined function
+  # caution notes:
+  # 1. double check that there is no conflict in argument names (i.e. same name that means different things) for the different function calls inside the user-defined function
+  # 2. if f has multiple methods or is defined in multiple packages, then one may need to specify the method and/or namespace for f, so that formalArgs(f) gives the correct arguments (e.g. use f=SeuratObject:::subset.Seurat instead of f=subset)
+  args <- list(...)
+  do.call(f, args[names(args)=="" | names(args) %in% formalArgs(f)])
+}
+
+
