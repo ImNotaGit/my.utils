@@ -685,6 +685,101 @@ run.survdiff <- function(dat, model = Surv(surv_days, surv_status) ~ x + y + str
 }
 
 
+run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"), base, auto.base=TRUE, auto.base.cutoff=0.05, coef, ..., keep.fit=FALSE) {
+  # fit a Dirichlet regression model (wrapper around DirichletReg::DirichReg)
+  # dat: a matrix of sample-by-compositional variables; will convert to fractions within each row (i.e. divided by row sums)
+  # pheno: a data.table/data.frame containing covariates
+  # model: formula for regression (do not include left-hand side)
+  # model.type: use common or alternative parameterization for Dirichlet regression
+  # base: the base/reference category, either character (corresponding to colnames of dat) or numeric (corresponding to column index of dat); only has effect if model.type is alternative
+  # auto.base: whether to automatically select the base/reference category; only has effect if base is missing; if FALSE (and base is missing), will just use the first category (i.e. base=1)
+  # the automatic selection of base follows the scCODA method, i.e. will select the category with the smallest dispersion in fractions across all samples, among the categories that have missing or zero values in less than auto.base.cutoff fraction of samples
+  # coef: for which variable/term should the regression coefficient and p value be returned; is missing, return all coefficients
+  # ...: additional arguments passed to DirichletReg::DirichReg
+  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+
+  if (!requireNamespace("DirichletReg", quietly=TRUE)) {
+    stop("Package \"DirichletReg\" needed for this function to work.")
+  }
+
+  library(DirichletReg) # the package was not attached; attach it if this function is called
+  
+  model.type <- match.arg(model.type)
+  cs <- colnames(dat)
+  dat <- dat/rowSums(dat, na.rm=TRUE)
+  if ("sub.comp" %in% names(list(...))) stop("The `sub.comp` argument is provided. This is not supported yet and the base may not be what is specified.")
+
+  if (model.type=="alternative") {
+    if (missing(base)) {
+      if (auto.base) {
+        disp <- apply(dat, 2, function(x) var(x)/mean(x))
+        idx <- colMeans(dat==0)<auto.base.cutoff
+        if (sum(idx)==0) stop(sprintf("No category can be selected as base, may need to increase `auto.base.cutoff` (to at least %d.5/%d)", min(colSums(dat==0)), nrow(dat)))
+        base <- which(disp==min(disp[idx]))
+        message(sprintf("Automatically selected \"%s\" as the base category.", cs[base]))
+      } else {
+        base <- 1
+        message(sprintf("Using \"%s\" as the base category.", cs[base]))
+      }
+    } else if (is.character(base)) {
+      base <- which(cs==base)
+      if (length(base)==0) stop("The specified `base` is not among the colnames of `dat`.")
+    } else if (is.numeric(base)) {
+      message(sprintf("Using \"%s\" as the base category.", cs[base]))
+    }
+  } else base <- 1 # if model.type=="common", base has no effect
+
+  dat <- as.data.frame(dat)
+  dat$Y <- DR_data(dat, base=base)
+  dat <- cbind(dat, as.data.frame(pheno))
+  model <- as.formula(paste("Y", paste(as.character(model), collapse=" "))) # cannot simply use update.formula, or the resulting formula will give error in DirichReg
+  tryCatch({
+    fit <- do.call(DirichReg, c(list(formula=model, data=dat, model=model.type, base=base), list(...))) # have to use do.call otherwise cannot pass in the formula properly due to internal design of DirichReg
+    summ <- summary(fit)
+    # extracting model coefficients and p values following DirichletReg::print.summary_DirichletRegModel
+    if (model.type=="common") {
+      res <- rbindlist(lapply(setNames(seq_along(summ$varnames), nm=summ$varnames), function(i) {
+        tmp <- summ$coef.mat[ifelse(i==1, 1, summ$coef.ind[i-1]+1):summ$coef.ind[i], , drop=FALSE]
+        cbind(x.var=rownames(tmp), as.data.table(tmp))
+      }), idcol="id")
+    } else {
+      fit$base.var <- cs[base] # keep record of the name of the base category
+      printed.var <- 1
+      set.size <- summ$n.vars[1]
+      res <- data.table()
+      for (i in seq_along(summ$varnames)) {
+        if (i==summ$base) {
+          tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE] # only to use its rownames
+          res <- rbind(res, data.table(id=summ$varnames[i], x.var=rownames(tmp)), fill=TRUE)
+        } else {
+          tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE]
+          res <- rbind(res, cbind(id=summ$varnames[i], x.var=rownames(tmp), as.data.table(tmp)), fill=TRUE)
+          printed.var <- printed.var + set.size
+        }
+      }
+      tmp <- summ$coef.mat[printed.var:length(summ$coefficients), , drop=FALSE]
+      res <- rbind(res, cbind(id="precision", x.var=rownames(tmp), as.data.table(tmp)), fill=TRUE)
+    }
+    setnames(res, c("Estimate","Std. Error","z value", "Pr(>|z|)"), c("coef","se","z","pval"))
+    res <- lapply(split(res, by="x.var"), function(x) {
+      if (model.type=="common") x[, padj:=p.adjust(pval, "BH")] else x[id!="precision", padj:=p.adjust(pval, "BH")]
+      x <- x[order(padj, pval, na.last=FALSE), -"x.var"]
+      rbind(x[id=="precision"], x[id!="precision"])
+    })
+    if (!missing(coef)) {
+      if (any(!coef %in% names(res))) {
+        warning("Invalid `coef`; return results for all coefficients, please double check.")
+      } else res <- res[names(res) %in% coef]
+    }
+    if (length(res)==1) res <- res[[1]]
+    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
+  }, error=function(e) {
+    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
+    if (keep.fit) list(fitted.model=e, summary.table=data.table(id=NA, coef=NA, se=NA, z=NA, pval=NA, padj=NA)) else data.table(id=NA, coef=NA, se=NA, z=NA, pval=NA, padj=NA)
+  })
+}
+
+
 simple.nested.model.matrix <- function(dat, a, b) {
   # create a proper design matrix for a simple nested design in the form of ~a/b
   # a and b should be both categorical, a should have two (or more) levels, b should have three or more levels, nested within a

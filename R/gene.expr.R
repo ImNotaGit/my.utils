@@ -307,7 +307,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
   if (!(missing(contrast) || is.null(contrast))) {
     if (!is.list(contrast)) contrast <- list(contrast)
     contrast <- lapply(contrast, function(x) {
-      if (is.character(x)) limma::makeContrasts(contrasts=x, levels=design) else x
+      if (is.character(x)) makeContrasts(contrasts=x, levels=design, check.names=FALSE) else x # using my copy of makeContrasts
     })
     if (contr.to.coef) {
       message("Reforming design matrix with limma::contrastAsCoef such that contrasts become coefficients.")
@@ -503,7 +503,7 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
 }
 
 
-de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, pos.only=FALSE, lfc.only=FALSE, nc=1L, return.fit=FALSE, ...) {
+de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, pos.only=FALSE, lfc.only=FALSE, nc=1L, keep.fit=FALSE, ...) {
   # differential expression analysis with MAST, used for e.g. single-cell RNA-seq data
   # dat: gene-by-sample expression matrix (assuming sparse) of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
   # pheno: phenotypic data as a data.table with the same order of samples
@@ -518,7 +518,7 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
   # *note: I include lfc.cutoff and pos.only arguments here (rather than downstream) because I want to filter genes before doing LR test to save time (if p values are needed)
   # lfc.only: if TRUE, will return only log fold-change without p values
   # nc: number of cores to use for multi-core parallelization
-  # return.fit: if TRUE, return list(fit=zlm.fit, summ=zlm.summ, de.res=de.res), where zlm.fit is the output from MAST::zlm, and zlm.summ if the output from summary(zlm.fit); otherwise return de.res
+  # keep.fit: if TRUE, return list(fit=zlm.fit, summ=zlm.summ, de.res=de.res), where zlm.fit is the output from MAST::zlm, and zlm.summ if the output from summary(zlm.fit); otherwise return de.res
   # ...: passed to MAST::zlm
 
   if (!requireNamespace("MAST", quietly=TRUE)) {
@@ -625,7 +625,7 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
   }
   #de.res <- de.res[order(-abs(log.fc))]
   de.res <- de.res[order(padj, pval)]
-  if (return.fit) list(fit=zlm.fit, summ=zlm.summ, de.res=de.res) else de.res
+  if (keep.fit) list(fit=zlm.fit, summ=zlm.summ, de.res=de.res) else de.res
 }
 
 
