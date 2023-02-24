@@ -735,7 +735,7 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
   model <- as.formula(paste("Y", paste(as.character(model), collapse=" "))) # cannot simply use update.formula, or the resulting formula will give error in DirichReg
   tryCatch({
     fit <- do.call(DirichReg, c(list(formula=model, data=dat, model=model.type, base=base), list(...))) # have to use do.call otherwise cannot pass in the formula properly due to internal design of DirichReg
-    summ <- summary(fit)
+    capture.output(summ <- summary(fit), file="/dev/null")
     # extracting model coefficients and p values following DirichletReg::print.summary_DirichletRegModel
     if (model.type=="common") {
       res <- rbindlist(lapply(setNames(seq_along(summ$varnames), nm=summ$varnames), function(i) {
