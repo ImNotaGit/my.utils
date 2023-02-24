@@ -733,50 +733,45 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
   dat$Y <- DR_data(dat, base=base)
   dat <- cbind(dat, as.data.frame(pheno))
   model <- as.formula(paste("Y", paste(as.character(model), collapse=" "))) # cannot simply use update.formula, or the resulting formula will give error in DirichReg
-  tryCatch({
-    fit <- do.call(DirichReg, c(list(formula=model, data=dat, model=model.type, base=base), list(...))) # have to use do.call otherwise cannot pass in the formula properly due to internal design of DirichReg
-    capture.output(summ <- summary(fit), file="/dev/null")
-    # extracting model coefficients and p values following DirichletReg::print.summary_DirichletRegModel
-    if (model.type=="common") {
-      res <- rbindlist(lapply(setNames(seq_along(summ$varnames), nm=summ$varnames), function(i) {
-        tmp <- summ$coef.mat[ifelse(i==1, 1, summ$coef.ind[i-1]+1):summ$coef.ind[i], , drop=FALSE]
-        cbind(x.var=rownames(tmp), as.data.table(tmp))
-      }), idcol="id")
-    } else {
-      fit$base.var <- cs[base] # keep record of the name of the base category
-      printed.var <- 1
-      set.size <- summ$n.vars[1]
-      res <- data.table()
-      for (i in seq_along(summ$varnames)) {
-        if (i==summ$base) {
-          tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE] # only to use its rownames
-          res <- rbind(res, data.table(id=summ$varnames[i], x.var=rownames(tmp)), fill=TRUE)
-        } else {
-          tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE]
-          res <- rbind(res, cbind(id=summ$varnames[i], x.var=rownames(tmp), as.data.table(tmp)), fill=TRUE)
-          printed.var <- printed.var + set.size
-        }
+  fit <- do.call(DirichReg, c(list(formula=model, data=dat, model=model.type, base=base), list(...))) # have to use do.call otherwise cannot pass in the formula properly due to internal design of DirichReg
+  capture.output(summ <- summary(fit), file="/dev/null")
+  # extracting model coefficients and p values following DirichletReg::print.summary_DirichletRegModel
+  if (model.type=="common") {
+    res <- rbindlist(lapply(setNames(seq_along(summ$varnames), nm=summ$varnames), function(i) {
+      tmp <- summ$coef.mat[ifelse(i==1, 1, summ$coef.ind[i-1]+1):summ$coef.ind[i], , drop=FALSE]
+      cbind(x.var=rownames(tmp), as.data.table(tmp))
+    }), idcol="id")
+  } else {
+    fit$base.var <- cs[base] # keep record of the name of the base category
+    printed.var <- 1
+    set.size <- summ$n.vars[1]
+    res <- data.table()
+    for (i in seq_along(summ$varnames)) {
+      if (i==summ$base) {
+        tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE] # only to use its rownames
+        res <- rbind(res, data.table(id=summ$varnames[i], x.var=rownames(tmp)), fill=TRUE)
+      } else {
+        tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE]
+        res <- rbind(res, cbind(id=summ$varnames[i], x.var=rownames(tmp), as.data.table(tmp)), fill=TRUE)
+        printed.var <- printed.var + set.size
       }
-      tmp <- summ$coef.mat[printed.var:length(summ$coefficients), , drop=FALSE]
-      res <- rbind(res, cbind(id="precision", x.var=rownames(tmp), as.data.table(tmp)), fill=TRUE)
     }
-    setnames(res, c("Estimate","Std. Error","z value", "Pr(>|z|)"), c("coef","se","z","pval"))
-    res <- lapply(split(res, by="x.var"), function(x) {
-      if (model.type=="common") x[, padj:=p.adjust(pval, "BH")] else x[id!="precision", padj:=p.adjust(pval, "BH")]
-      x <- x[order(padj, pval, na.last=FALSE), -"x.var"]
-      rbind(x[id=="precision"], x[id!="precision"])
-    })
-    if (!missing(coef)) {
-      if (any(!coef %in% names(res))) {
-        warning("Invalid `coef`; return results for all coefficients, please double check.")
-      } else res <- res[names(res) %in% coef]
-    }
-    if (length(res)==1) res <- res[[1]]
-    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
-  }, error=function(e) {
-    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
-    if (keep.fit) list(fitted.model=e, summary.table=data.table(id=NA, coef=NA, se=NA, z=NA, pval=NA, padj=NA)) else data.table(id=NA, coef=NA, se=NA, z=NA, pval=NA, padj=NA)
+    tmp <- summ$coef.mat[printed.var:length(summ$coefficients), , drop=FALSE]
+    res <- rbind(res, cbind(id="precision", x.var=rownames(tmp), as.data.table(tmp)), fill=TRUE)
+  }
+  setnames(res, c("Estimate","Std. Error","z value", "Pr(>|z|)"), c("coef","se","z","pval"))
+  res <- lapply(split(res, by="x.var"), function(x) {
+    if (model.type=="common") x[, padj:=p.adjust(pval, "BH")] else x[id!="precision", padj:=p.adjust(pval, "BH")]
+    x <- x[order(padj, pval, na.last=FALSE), -"x.var"]
+    rbind(x[id=="precision"], x[id!="precision"])
   })
+  if (!missing(coef)) {
+    if (any(!coef %in% names(res))) {
+      warning("Invalid `coef`; return results for all coefficients, please double check.")
+    } else res <- res[names(res) %in% coef]
+  }
+  if (length(res)==1) res <- res[[1]]
+  if (keep.fit) list(fitted.model=fit, summary.table=res) else res
 }
 
 
