@@ -691,8 +691,8 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
   # pheno: a data.table/data.frame containing covariates
   # model: formula for regression (do not include left-hand side)
   # model.type: use common or alternative parameterization for Dirichlet regression
-  # base: the base/reference category, either character (corresponding to colnames of dat) or numeric (corresponding to column index of dat); only has effect if model.type is alternative
-  # auto.base: whether to automatically select the base/reference category; only has effect if base is missing; if FALSE (and base is missing), will just use the first category (i.e. base=1)
+  # base: the base/reference category, either character (corresponding to colnames of dat), or numeric (corresponding to column index of dat), or NULL; only has effect if model.type is alternative
+  # auto.base: whether to automatically select the base/reference category; only has effect if base is missing or NULL; if FALSE (and base is missing or NULL), will just use the first category (i.e. base=1)
   # the automatic selection of base follows the scCODA method, i.e. will select the category with the smallest dispersion in fractions across all samples, among the categories that have missing or zero values in less than auto.base.cutoff fraction of samples
   # coef: for which variable/term should the regression coefficient and p value be returned; is missing, return all coefficients
   # ...: additional arguments passed to DirichletReg::DirichReg
@@ -710,7 +710,7 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
   if ("sub.comp" %in% names(list(...))) stop("The `sub.comp` argument is provided. This is not supported yet and the base may not be what is specified.")
 
   if (model.type=="alternative") {
-    if (missing(base)) {
+    if (missing(base) || is.null(base)) {
       if (auto.base) {
         disp <- apply(dat, 2, function(x) var(x)/mean(x))
         idx <- colMeans(dat==0)<auto.base.cutoff
