@@ -322,11 +322,81 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 
   if (missing(coef) || is.null(coef)) stop("No `coef`, `contrast`, or `reduced.model` was provided.")
 
-  list(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast)
+  list(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, ccs=ccs)
 }
 
 
-de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, lfc.cutoff=0, keep.fit=FALSE, ...) {
+.calc.norm.factors.with.ctrl <- function(object, ctrl, lib.size = NULL, method=c("TMM", "RLE"), refColumn = NULL, doWeighting = TRUE, Acutoff = -1e+10) {
+  # my copy of edgeR::calcNormFactors.default allowing for specifying of control features/genes, i.e. features/genes that are exprected to remain stable across conditions.
+  # ctrl: one or more control features/genes as row indices or row names of object, which is a gene (feature)-by-sample matrix
+
+  if (!requireNamespace("edgeR", quietly=TRUE)) {
+    stop("Package \"edgeR\" needed for this function to work.")
+  }
+
+  if (is.character(ctrl)) ctrl <- match(ctrl, rownames(object))
+  if (all(is.na(ctrl))) stop("None of the provided control features is found in data.")
+  if (anyNA(ctrl)) message("Some control features not in data.")
+  ctrl <- ctrl[!is.na(ctrl)]
+
+  calc.factor.tmm <- function(obs, ctrl, ref, libsize.obs, libsize.ref, doWeighting, Acutoff) {
+    # ctrl: index of control feature(s)
+    obs <- as.numeric(obs)
+    ref <- as.numeric(ref)
+    if (is.null(libsize.obs)) nO <- sum(obs) else nO <- libsize.obs
+    if (is.null(libsize.ref)) nR <- sum(ref) else nR <- libsize.ref
+    logR <- log2((obs/nO)/(ref/nR))
+    absE <- (log2(obs/nO) + log2(ref/nR))/2
+    v <- (nO - obs)/nO/obs + (nR - ref)/nR/ref
+    logR <- logR[ctrl]
+    absE <- absE[ctrl]
+    v <- v[ctrl]
+    fin <- is.finite(logR) & is.finite(absE) & (absE > Acutoff)
+    if (sum(fin)==0) stop("No control feature has finite logR with finite absE>Acutoff.")
+    logR <- logR[fin]
+    absE <- absE[fin]
+    v <- v[fin]
+    if (max(abs(logR)) < 1e-06) return(1)
+    if (doWeighting) f <- sum(logR/v, na.rm = TRUE)/sum(1/v, na.rm = TRUE) else f <- mean(logR, na.rm = TRUE)
+    if (is.na(f)) f <- 0
+    2^f
+  }
+
+  x <- as.matrix(object)
+  if (any(is.na(x))) stop("NA counts not permitted")
+  nsamples <- ncol(x)
+  if (is.null(lib.size)) {
+    lib.size <- colSums(x)
+  } else {
+    if (anyNA(lib.size)) stop("NA lib.sizes not permitted")
+    if (length(lib.size) != nsamples) {
+      if (length(lib.size) > 1L) warning(".calc.norm.factors.tmm.with.ctrl: length(lib.size) doesn't match number of samples", call. = FALSE)
+      lib.size <- rep_len(lib.size, nsamples)
+    }
+  }
+  method <- match.arg(method)
+  allzero <- .rowSums(x > 0, nrow(x), nsamples) == 0L
+  if (any(allzero)) x <- x[!allzero, , drop = FALSE]
+  f <- switch(method, TMM = {
+    if (is.null(refColumn)) {
+      f75 <- suppressWarnings(edgeR:::.calcFactorQuantile(data = x, lib.size = lib.size, p = 0.75))
+      if (median(f75) < 1e-20) refColumn <- which.max(colSums(sqrt(x))) else refColumn <- which.min(abs(f75 - mean(f75)))
+    }
+    f <- rep_len(NA_real_, nsamples)
+    for (i in 1:nsamples) f[i] <- calc.factor.tmm(obs = x[, i], ctrl=ctrl, ref = x[, refColumn], libsize.obs = lib.size[i], libsize.ref = lib.size[refColumn], doWeighting = doWeighting, Acutoff = Acutoff)
+    f
+  }, RLE = {
+    gm <- exp(rowMeans(log(x[ctrl, , drop=FALSE])))
+    f <- apply(x[ctrl, , drop=FALSE], 2, function(u) median((u/gm)[gm > 0]))
+    f/lib.size
+  })
+  f <- f/exp(mean(log(f)))
+  names(f) <- colnames(x)
+  f
+}
+
+
+de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, lfc.cutoff=0, keep.fit=FALSE, ctrl.features, norm.factors, ...) {
   # differential expression analysis with edgeR
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.table with the same order of samples
@@ -339,6 +409,10 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
+  # ctrl.features: control features/genes that are expected to remain stable across conditions; if provided (i.e. not missing or NULL), will use my custom function .calc.norm.factors. instead of edge::calcNormFactors, and assign the result to dge@samples$norm.factors; for this, the normalization method (specified via `method` argument in ...) can only be "TMM" (default) or "RLE"
+  # norm.factors: custom edgeR normalization factors, a numeric vector, will directly set dge$samples$norm.factors to this if provided; otherwise (i.e. if missing or NULL), will use edgeR::calcNormFactors
+  # note: in edgeR, norm.factors is added on to library size (total counts per sample), i.e. norm.factors*library.size is used for normalization
+  # note: there are two ways to use only library.size for normalization, one is to specify norm.factors=1, the other is to pass method="none" within ... (see below)
   # ...: any possible additional arguments of calcNormFactors, estimateDisp, glmQLFit, glmQLFTest, and glmTreat, e.g. `method` for calcNormFactors, `trend.method` for estimateDisp, `robust` for estimateDisp and glmQLFit (somewhat different meanings in both but may as well be set identically), `abundance.trend` for glmQLFit, etc.
 
   if (!requireNamespace("edgeR", quietly=TRUE)) {
@@ -347,7 +421,19 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
 
   pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
   dge <- edgeR::DGEList(counts=pars$dat)
-  dge <- pass3dots(edgeR::calcNormFactors.DGEList, dge, ...)
+  if (missing(norm.factors) || is.null(norm.factors)) {
+    if (missing(ctrl.features) || is.null(ctrl.features)) {
+      dge <- pass3dots(edgeR::calcNormFactors.DGEList, dge, ...)
+    } else {
+      m <- list(...)$method
+      if (!is.null(m) && !m %in% c("TMM","RLE")) stop("Only \"TMM\" and \"RLE\" are supported normalization methods when `ctrl.features` is provided.")
+      norm.factors <- pass3dots(.calc.norm.factors.with.ctrl, dge$counts, ctrl=ctrl.features, lib.size=dge$samples$lib.size, ...)
+      dge$samples$norm.factors <- norm.factors
+  } else {
+    if (length(norm.factors)==1) norm.factors <- rep(norm.factors, ncol(pars$dat)) else norm.factors <- norm.factors[pars$ccs]
+    if (is.null(names(norm.factors))) names(norm.factors) <- colnames(pars$dat)
+    dge$samples$norm.factors <- norm.factors
+  }
 
   if (!contr.to.coef) {
     dge <- pass3dots(edgeR::estimateDisp.DGEList, dge, pars$design, ...)
@@ -389,7 +475,7 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
 }
 
 
-de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, keep.fit=FALSE, nc=1L, ...) {
+de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, keep.fit=FALSE, nc=1L, ctrl.features, size.factors, ...) {
   # differential expression analysis with DESeq2
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.table with the same order of samples
@@ -404,6 +490,9 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
   # nc: number of cores for parallelization
+  # ctrl.features: control features/genes that are expected to remain stable across conditions; if provided (i.e. not missing or NULL), will be passed to the `controlGenes` argument of DESeq2::estimateSizeFactors, but unlike `controlGenes`, this can be provided as a character vector of feature/gene symbols (rownames of dat)
+  # size.factors: custom size factors for DESeq2, a numeric vector, will directly set sizeFactors(dds) to this if provided; otherwise (i.e. if missing or NULL), will use DESeq2::estimateSizeFactors
+  # note: the DESeq2 size factor is directly used for normalization (unlike the edgeR normalization factor, which is multiplied by library size before being used for normalization)
   # ...: passed to DESeq2::DESeq and DESeq2::results
 
   if (!requireNamespace(c("DESeq2","BiocParallel"), quietly=TRUE)) {
@@ -419,8 +508,22 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   if (is.null(pars$pheno)) pars$pheno <- data.table(idx=1:ncol(pars$dat))
   if (nc>1) bp <- BiocParallel::MulticoreParam(workers=nc, progressbar=TRUE, RNGseed=0) else bp <- BiocParallel::bpparam()
 
+  if (!(missing(ctrl.features) || is.null(ctrl.features))) {
+    if (is.character(ctrl.features)) ctrl.features <- match(ctrl.features, rownames(pars$dat))
+    if (all(is.na(ctrl.features))) stop("None of the provided `ctrl.features` is found in data.")
+    if (anyNA(ctrl.features)) message("Some `ctrl.features` not in data.")
+    ctrl.features <- ctrl.features[!is.na(ctrl.features)]
+  }
+
+  if (!(missing(size.factors) || is.null(size.factors))) {
+    if (length(size.factors)==1) size.factors <- rep(size.factors, ncol(pars$dat)) else size.factors <- size.factors[pars$ccs]
+  }
+
   if (!contr.to.coef) {
     dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=pars$design)
+    if (missing(size.factors) || is.null(size.factors)) {
+      dds <- pass3dots(DESeq2::estimateSizeFactors, dds, controlGenes=ctrl.features, ...)
+    } else sizeFactors(dds) <- size.factors
     fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
     if (!is.null(pars$contrast)) {
       de.res <- lapply(pars$contrast, function(x) pass3dots(DESeq2::results, fit, contrast=x, parallel=nc>1, BPPARAM=bp, ...))
@@ -430,6 +533,9 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   } else {
     tmp <- mapply(function(design, coef) {
       dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=design)
+      if (missing(size.factors) || is.null(size.factors)) {
+        dds <- pass3dots(DESeq2::estimateSizeFactors, dds, controlGenes=ctrl.features, ...)
+      } else sizeFactors(dds) <- size.factors
       fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
       de.res <- pass3dots(DESeq2::results, fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
       list(fit=fit, de.res=de.res)
