@@ -129,7 +129,7 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
   # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
   # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
@@ -320,7 +320,11 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
     }
   } else contrast <- NULL
 
-  if (missing(coef) || is.null(coef)) stop("No `coef`, `contrast`, or `reduced.model` was provided.")
+  if (missing(coef) || is.null(coef)) {
+    message("No `coef`, `contrast`, or `reduced.model` was provided, will return all coefficients in the model.")
+    coef <- colnames(design)
+    coef <- setNames(as.list(coef), coef)
+  }
 
   list(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, ccs=ccs)
 }
@@ -403,14 +407,14 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
   # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
   # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
-  # ctrl.features: control features/genes that are expected to remain stable across conditions; if provided (i.e. not missing or NULL), will use my custom function .calc.norm.factors. instead of edge::calcNormFactors, and assign the result to dge@samples$norm.factors; for this, the normalization method (specified via `method` argument in ...) can only be "TMM" (default) or "RLE"
-  # norm.factors: custom edgeR normalization factors, a numeric vector, will directly set dge$samples$norm.factors to this if provided; otherwise (i.e. if missing or NULL), will use edgeR::calcNormFactors
+  # ctrl.features: control features/genes that are expected to remain stable across conditions; if provided (i.e. not missing or NULL), will use my custom function .calc.norm.factors.with.ctrl instead of edge::calcNormFactors, and assign the result to dge@samples$norm.factors; for this, the normalization method (specified via `method` argument in ...) can only be "TMM" (default) or "RLE"
+  # norm.factors: custom edgeR normalization factors, a numeric vector, will directly set dge$samples$norm.factors to this if provided; otherwise (i.e. if missing or NULL), will use edgeR::calcNormFactors (or my custom function, if ctrl.features is provided)
   # note: in edgeR, norm.factors is added on to library size (total counts per sample), i.e. norm.factors*library.size is used for normalization
   # note: there are two ways to use only library.size for normalization, one is to specify norm.factors=1, the other is to pass method="none" within ... (see below)
   # ...: any possible additional arguments of calcNormFactors, estimateDisp, glmQLFit, glmQLFTest, and glmTreat, e.g. `method` for calcNormFactors, `trend.method` for estimateDisp, `robust` for estimateDisp and glmQLFit (somewhat different meanings in both but may as well be set identically), `abundance.trend` for glmQLFit, etc.
@@ -429,6 +433,7 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
       if (!is.null(m) && !m %in% c("TMM","RLE")) stop("Only \"TMM\" and \"RLE\" are supported normalization methods when `ctrl.features` is provided.")
       norm.factors <- pass3dots(.calc.norm.factors.with.ctrl, dge$counts, ctrl=ctrl.features, lib.size=dge$samples$lib.size, ...)
       dge$samples$norm.factors <- norm.factors
+    }
   } else {
     if (length(norm.factors)==1) norm.factors <- rep(norm.factors, ncol(pars$dat)) else norm.factors <- norm.factors[pars$ccs]
     if (is.null(names(norm.factors))) names(norm.factors) <- colnames(pars$dat)
@@ -482,7 +487,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
   # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
   # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
   # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
@@ -562,7 +567,7 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide only one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
   # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
   # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
   # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
