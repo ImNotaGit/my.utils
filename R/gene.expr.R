@@ -258,7 +258,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 }
 
 
-.process.de.params <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE) {
+.process.de.params <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, make.coef.names=FALSE) {
 
   if (missing(design) || is.null(design)) {
     if (missing(pheno) || is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
@@ -302,9 +302,13 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
         colnames(design)[-x]
       } else stop("Invalid `reduced.model`, should be a single or a list of formulae or numeric/character vectors.")
     })
-  }
+  } else reduced.model <- NULL
 
   if (!(missing(contrast) || is.null(contrast))) {
+    if (!(missing(coef) || is.null(coef))) {
+      warning("`contrast` is provided, will ignore `coef`.")
+      coef <- NULL
+    }
     if (!is.list(contrast)) contrast <- list(contrast)
     contrast <- lapply(contrast, function(x) {
       if (is.character(x)) makeContrasts(contrasts=x, levels=design, check.names=FALSE) else x # using my copy of makeContrasts
@@ -318,12 +322,23 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       design <- lapply(tmp, function(x) x$design)
       coef <- lapply(tmp, function(x) x$coef)
     }
-  } else contrast <- NULL
+  } else {
+    contrast <- NULL
+    if (missing(coef) || is.null(coef)) {
+      message("No `coef`, `contrast`, or `reduced.model` was provided, will return all coefficients in the model.")
+      coef <- colnames(design)
+      coef <- setNames(as.list(coef), coef)
+    }
+  }
 
-  if (missing(coef) || is.null(coef)) {
-    message("No `coef`, `contrast`, or `reduced.model` was provided, will return all coefficients in the model.")
-    coef <- colnames(design)
-    coef <- setNames(as.list(coef), coef)
+  if (!is.null(coef)) {
+    names(coef)[names(coef)=="(Intercept)"] <- "Intercept"
+    if (make.coef.names) {
+      coef <- lapply(coef, function(x) {
+        x[x=="(Intercept)"] <- "Intercept"
+        make.names(x)
+      })
+    }
   }
 
   list(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, ccs=ccs)
@@ -337,11 +352,6 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
   if (!requireNamespace("edgeR", quietly=TRUE)) {
     stop("Package \"edgeR\" needed for this function to work.")
   }
-
-  if (is.character(ctrl)) ctrl <- match(ctrl, rownames(object))
-  if (all(is.na(ctrl))) stop("None of the provided control features is found in data.")
-  if (anyNA(ctrl)) message("Some control features not in data.")
-  ctrl <- ctrl[!is.na(ctrl)]
 
   calc.factor.tmm <- function(obs, ctrl, ref, libsize.obs, libsize.ref, doWeighting, Acutoff) {
     # ctrl: index of control feature(s)
@@ -368,6 +378,11 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 
   x <- as.matrix(object)
   if (any(is.na(x))) stop("NA counts not permitted")
+  if (is.character(ctrl)) ctrl <- match(ctrl, rownames(x))
+  if (all(is.na(ctrl))) stop("None of the provided control features is found in data.")
+  if (anyNA(ctrl)) message("Some control features not in data.")
+  ctrl <- ctrl[!is.na(ctrl)]
+  if (any(colSums(x[ctrl, , drop=FALSE])==0)) stop("There exist some samples where all control features have zero counts. Normalization with control features cannot proceed.")
   nsamples <- ncol(x)
   if (is.null(lib.size)) {
     lib.size <- colSums(x)
@@ -392,6 +407,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
   }, RLE = {
     gm <- exp(rowMeans(log(x[ctrl, , drop=FALSE])))
     f <- apply(x[ctrl, , drop=FALSE], 2, function(u) median((u/gm)[gm > 0]))
+    if (anyNA(f)) stop("There are NA's in normalization factors.")
     f/lib.size
   })
   f <- f/exp(mean(log(f)))
@@ -509,7 +525,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
     dat <- round(dat)
   }
 
-  pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
+  pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef, make.coef.names=TRUE)
   if (is.null(pars$pheno)) pars$pheno <- data.table(idx=1:ncol(pars$dat))
   if (nc>1) bp <- BiocParallel::MulticoreParam(workers=nc, progressbar=TRUE, RNGseed=0) else bp <- BiocParallel::bpparam()
 
@@ -527,7 +543,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   if (!contr.to.coef) {
     dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=pars$design)
     if (missing(size.factors) || is.null(size.factors)) {
-      dds <- pass3dots(DESeq2::estimateSizeFactors, dds, controlGenes=ctrl.features, ...)
+      dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
     } else sizeFactors(dds) <- size.factors
     fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
     if (!is.null(pars$contrast)) {
@@ -539,7 +555,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
     tmp <- mapply(function(design, coef) {
       dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=design)
       if (missing(size.factors) || is.null(size.factors)) {
-        dds <- pass3dots(DESeq2::estimateSizeFactors, dds, controlGenes=ctrl.features, ...)
+        dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
       } else sizeFactors(dds) <- size.factors
       fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
       de.res <- pass3dots(DESeq2::results, fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
