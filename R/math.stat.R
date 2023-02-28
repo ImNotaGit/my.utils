@@ -549,6 +549,7 @@ gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
 
 run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fit) {
   # helper function for constructing the various run* functions
+  # coef: if missing or NULL, will return results for all coefficients in the model
 
   tmp <- list(...)
   args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(f))])
@@ -556,7 +557,11 @@ run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fi
   tryCatch({
     fit <- do.call(f, args)
     tmp <- coef(summary(fit))
+    if (missing(coef) || is.null(coef)) coef <- rownames(tmp)
+    if (is.numeric(coef)) coef <- rownames(tmp)[coef]
+    if (any(!coef %in% rownames(tmp))) stop("Some `coef` not in model.")
     res <- data.table(coef=tmp[coef, colnames(tmp) %in% c("Estimate","coef")], se=tmp[coef, colnames(tmp) %in% c("Std. Error","se(coef)")], pval=tmp[coef, colnames(tmp) %in% c("Pr(>|t|)","Pr(>|z|)")])
+    if (length(coef)>1) res <- cbind(x=coef, res)
     # "anova-like" test if required
     if (drop.test!="none") {
       tmp <- drop1(fit, as.formula(paste("~",drop)), test=drop.test)
@@ -565,7 +570,9 @@ run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fi
     if (keep.fit) list(fitted.model=fit, summary.table=res) else res
   }, error=function(e) {
     warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
-    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, se=NA, pval=NA)) else data.table(coef=NA, se=NA, pval=NA)
+    res <- data.table(coef=NA, se=NA, pval=NA)
+    if (exists(coef) && is.vector(coef) && length(coef)>1) res <- cbind(x=coef, res)
+    if (keep.fit) list(fitted.model=e, summary.table=res) else res
   })
 }
 

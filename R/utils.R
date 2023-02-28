@@ -331,11 +331,18 @@ apply1 <- function(dat, pheno, f, ..., var.name="y", arg.name="dat", nc=1L) {
   res <- rbindlist(parApply(cl, dat, 1, function(x) {
     args$dat[[var.name]] <- x
     do.call(f, args)
-  }), idcol="id")
+  }), idcol="id", fill=TRUE)
   stopCluster(cl)
 
-  res <- adjust.pval(res)
-  res[order(padj, pval)]
+  if ("x" %in% names(res)) {
+    lapply(split(res, by="x"), function(x) {
+      x <- adjust.pval(x[, -"x"])
+      x[order(padj, pval)]
+    })
+  } else {
+    res <- adjust.pval(res)
+    res[order(padj, pval)]
+  }
 }
 
 
