@@ -330,10 +330,9 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       message("No `coef`, `contrast`, or `reduced.model` was provided, will return all coefficients in the model.")
       coef <- colnames(design)
       coef <- setNames(as.list(coef), coef)
+    } else {
+      if (!is.list(coef)) coef <- list(coef)
     }
-  }
-
-  if (!is.null(coef)) {
     names(coef)[names(coef)=="(Intercept)"] <- "Intercept"
     if (make.coef.names) {
       coef <- lapply(coef, function(x) {
@@ -605,7 +604,8 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
 
   pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
   # glmGamPoi::test_de has a bug if requesting contrast="(Intercept)", so for now I will simply exclude the intercept if need to return all coefficients
-  pars$coef <- pars$coef[names(pars$coef)!="Intercept"]
+  if ("Intercept" %in% names(pars$coef)) pars$coef <- pars$coef[names(pars$coef)!="Intercept"]
+  if (any(sapply(pars$coef, function(x) "(Intercept)" %in% x))) stop("Currently, glmGamPoi::test_de has a bug that the intercept term cannot be requested.")
 
   if (!contr.to.coef) {
     fit <- pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...)
