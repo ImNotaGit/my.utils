@@ -283,6 +283,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
     if (!(missing(pheno) || is.null(pheno))) {
       warning("Both `pheno` with `model` and `design` are provided, will use `design` and ignore `pheno` with `model`")
     } else pheno <- NULL
+    ccs <- rep(TRUE, nrow(design))
     red.mod.fml.ok <- FALSE
   }
 
@@ -767,7 +768,7 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
   mdat <- as.data.table(mdat)
   tmp <- sapply(blk, function(i) anyNA(mdat[, i, with=FALSE]))
   if (any(tmp)) warning(sprintf("These bulk variables contain NA! NA will be kept as a separate level:\n%s\n", paste(blk[tmp], collapse=", ")))
-  blk <- do.call(paste, c(unname(mdat[, blk, with=FALSE]), sep="_"))
+  blk <- do.call(paste, c(unname(as.list(mdat[, blk, with=FALSE])), list(sep="_")))
   tmp <- table(blk)>ncells.cutoff
   if (any(!tmp)) {
     idx <- blk %in% names(tmp)[tmp]
