@@ -604,6 +604,9 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
   if (missing(size.factors)) size.factors <- "normed_sum"
 
   pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
+  # glmGamPoi::test_de has a bug if requesting contrast="(Intercept)", so for now I will simply exclude the intercept if need to return all coefficients
+  pars$coef <- pars$coef[names(pars$coef)!="Intercept"]
+
   if (!contr.to.coef) {
     fit <- pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...)
     if (!is.null(pars$contrast)) {
