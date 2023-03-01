@@ -535,14 +535,21 @@ enrich.combo.sets2 <- function(fg1, fg2, refs1, refs2=refs1, bg1, bg2, nc=1L, ov
 }
 
 
-gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, ...) {
+gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, nc=1L, ...) {
   # GSEA analysis given a data.frame/data.table, x is the column name of the value, id is the column name of the label of x, gsets is a list of gene sets
+  # nc: number of cores
   # ... is passed to fgsea::fgsea
 
   x <- dat[[x]]
   names(x) <- dat[[id]]
   set.seed(seed)
-  res <- fgsea::fgsea(pathways=gsets, stats=x, ...)
+  if (nc>1) {
+    set.seed(seed)
+    res <- fgsea::fgsea(pathways=gsets, stats=x, BPPARAM=BiocParallel::MulticoreParam(workers=nc, progressbar=TRUE, RNGseed=seed), ...)
+  } else {
+    set.seed(seed)
+    res <- fgsea::fgsea(pathways=gsets, stats=x, ...)
+  }
   res[order(padj,pval)]
 }
 
