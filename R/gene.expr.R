@@ -262,6 +262,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 
   if (missing(design) || is.null(design)) {
     if (missing(pheno) || is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
+    pheno <- as.data.table(pheno)
     vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
     vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
     ccs <- complete.cases(pheno[, vs, with=FALSE])
