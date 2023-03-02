@@ -352,7 +352,8 @@ pass3dots <- function(f, ...) {
   # 1. double check that there is no conflict in argument names (i.e. same name that means different things) for the different function calls inside the user-defined function
   # 2. if f has multiple methods or is defined in multiple packages, then one may need to specify the method and/or namespace for f, so that formalArgs(f) gives the correct arguments (e.g. use f=SeuratObject:::subset.Seurat instead of f=subset)
   args <- list(...)
-  do.call(f, args[names(args)=="" | names(args) %in% formalArgs(f)])
+  if (!is.null(names(args))) args <- args[names(args)=="" | names(args) %in% formalArgs(f)]
+  do.call(f, args)
 }
 
 
