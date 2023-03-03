@@ -259,6 +259,20 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 
 
 .process.de.params <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, make.coef.names=FALSE) {
+  # a common helper function to various de.* functions, preprocessing their input to prepare the design matrix and intended DE tests
+  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+  # pheno: phenotypic data as a data.table with the same order of samples
+  # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
+  # design: design matrix for DE
+  # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
+  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
+  # make.coef.names: whether to apply make.names() to model coefficients -- set to TRUE for de.glmgampoi, which internally changes the names of the model variables
+  # will return a list(dat, pheno, model, design, coef, contrast, reduced.model, ccs), where dat and pheno will contain only complete.cases wrt model variables, and ccs is the index for the complete cases wrt the original input dat/pheno;
+  # reduced.model in the returned list: if providing `coef` or `reduced.model`, or `contrast` with contr.to.coef=TRUE, this will be the reduced design matrix for de.deseq2 with LRT test, to be passed to the `reduced` argument of DESeq2::DESeq -- DESeq2 with LRT has a different workflow and required arguments from Wald test
 
   if (missing(design) || is.null(design)) {
     if (missing(pheno) || is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
@@ -279,24 +293,19 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       pheno[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
     }
     design <- model.matrix(model, pheno)
-    red.mod.fml.ok <- TRUE
   } else {
-    if (!(missing(pheno) || is.null(pheno))) {
-      warning("Both `pheno` with `model` and `design` are provided, will use `design` and ignore `pheno` with `model`")
-    } else pheno <- NULL
+    if (!(missing(pheno) || is.null(pheno))) warning("Both `pheno` with `model` and `design` are provided, will use `design` and ignore `pheno` with `model`")
+    pheno <- NULL
     ccs <- rep(TRUE, nrow(design))
-    red.mod.fml.ok <- FALSE
   }
 
   if (!(missing(reduced.model) || is.null(reduced.model))) {
-    if (!(missing(contrast) || is.null(contrast)) || !(missing(coef) || is.null(coef))) {
-      warning("`reduced.model` is provided, will ignore `contrast` and `coef`.")
-      contrast <- coef <- NULL
-    }
+    if (!(missing(contrast) || is.null(contrast)) || !(missing(coef) || is.null(coef))) warning("`reduced.model` is provided, will ignore `contrast` and `coef`.")
+    contrast <- coef <- NULL
     if (!is.list(reduced.model)) reduced.model <- list(reduced.model)
     coef <- lapply(reduced.model, function(x) {
       if (class(x)=="formula") {
-        if (!red.mod.fml.ok) stop("Not using `pheno` with `model`, `reduced.model` can only be a single or a list of numeric/character vectors.")
+        if (is.null(pheno)) stop("Not using `pheno` with `model`, `reduced.model` cannot be a formula and can only be a single or a list of numeric/character vectors.")
         setdiff(colnames(design), colnames(model.matrix(x, pheno)))
       } else if (is.character(x)) {
         setdiff(colnames(design), x)
@@ -304,13 +313,9 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
         colnames(design)[-x]
       } else stop("Invalid `reduced.model`, should be a single or a list of formulae or numeric/character vectors.")
     })
-  } else reduced.model <- NULL
-
-  if (!(missing(contrast) || is.null(contrast))) {
-    if (!(missing(coef) || is.null(coef))) {
-      warning("`contrast` is provided, will ignore `coef`.")
-      coef <- NULL
-    }
+  } else if (!(missing(contrast) || is.null(contrast))) {
+    if (!(missing(coef) || is.null(coef))) warning("`contrast` is provided, will ignore `coef`.")
+    reduced.model <- coef <- NULL
     if (!is.list(contrast)) contrast <- list(contrast)
     contrast <- lapply(contrast, function(x) {
       if (is.character(x)) makeContrasts(contrasts=x, levels=design, check.names=FALSE) else x # using my copy of makeContrasts
@@ -319,13 +324,13 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       message("Reforming design matrix with limma::contrastAsCoef such that contrasts become coefficients.")
       tmp <- lapply(contrast, function(x) {
         tmp <- limma::contrastAsCoef(design, x)
-        list(design=tmp$design, coef=tmp$coef)
+        list(design=tmp$design, coef=colnames(tmp$design)[tmp$coef])
       })
       design <- lapply(tmp, function(x) x$design)
       coef <- lapply(tmp, function(x) x$coef)
     }
   } else {
-    contrast <- NULL
+    reduced.model <- contrast <- NULL
     if (missing(coef) || is.null(coef)) {
       message("No `coef`, `contrast`, or `reduced.model` was provided, will return all coefficients in the model.")
       coef <- colnames(design)
@@ -334,6 +339,15 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       if (!is.list(coef)) coef <- list(coef)
     }
     names(coef)[names(coef)=="(Intercept)"] <- "Intercept"
+  }
+
+  if (!is.null(coef)) {
+    if (!is.list(design)) tmp <- list(design) else tmp <- design
+    reduced.model <- mapply(function(des, x) {
+      res <- des[, !colnames(des) %in% x, drop=FALSE]
+      if ("contrasts" %in% names(attributes(des))) attr(res, "contrasts") <- attr(des, "contrasts")
+      res
+    }, tmp, coef, SIMPLIFY=FALSE)
     if (make.coef.names) {
       coef <- lapply(coef, function(x) {
         x[x=="(Intercept)"] <- "Intercept"
@@ -342,7 +356,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
     }
   }
 
-  list(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, ccs=ccs)
+  list(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, ccs=ccs)
 }
 
 
@@ -497,7 +511,7 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
 }
 
 
-de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, keep.fit=FALSE, nc=1L, ctrl.features, size.factors, ...) {
+de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, test=c("LRT","Wald"), keep.fit=FALSE, nc=1L, ctrl.features, size.factors, ...) {
   # differential expression analysis with DESeq2
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.table with the same order of samples
@@ -510,6 +524,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
+  # test: type of test to perform; here I change the default (as in DESeq2::DESeq) from "Wald" to "LRT"
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
   # nc: number of cores for parallelization
   # ctrl.features: control features/genes that are expected to remain stable across conditions; if provided (i.e. not missing or NULL), will be passed to the `controlGenes` argument of DESeq2::estimateSizeFactors, but unlike `controlGenes`, this can be provided as a character vector of feature/gene symbols (rownames of dat)
@@ -521,47 +536,82 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
     stop("Packages \"DESeq2\" and \"BiocParallel\" needed for this function to work.")
   }
 
+  test <- match.arg(test)
+  if (test=="LRT" && !(missing(contrast) || is.null(contrast)) && !contr.to.coef) {
+    message("Provided `contrast` with test=\"LRT\", will enforce contr.to.coef=TRUE.")
+    contr.to.coef <- TRUE
+  }
+
+  if (nc>1) bp <- BiocParallel::MulticoreParam(workers=nc, progressbar=TRUE, RNGseed=0) else bp <- BiocParallel::bpparam()
+
   if (any(!is.wholenumber(dat))) {
     message("DESeq2 only accepts integer read counts. There are non-integer values in `dat` and they have been rounded.")
     dat <- round(dat)
   }
-
   pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef, make.coef.names=TRUE)
   if (is.null(pars$pheno)) pars$pheno <- data.table(idx=1:ncol(pars$dat))
-  if (nc>1) bp <- BiocParallel::MulticoreParam(workers=nc, progressbar=TRUE, RNGseed=0) else bp <- BiocParallel::bpparam()
 
   if (!(missing(ctrl.features) || is.null(ctrl.features))) {
     if (is.character(ctrl.features)) ctrl.features <- match(ctrl.features, rownames(pars$dat))
     if (all(is.na(ctrl.features))) stop("None of the provided `ctrl.features` is found in data.")
     if (anyNA(ctrl.features)) message("Some `ctrl.features` not in data.")
     ctrl.features <- ctrl.features[!is.na(ctrl.features)]
-  }
+  } else ctrl.features <- NULL
 
   if (!(missing(size.factors) || is.null(size.factors))) {
     if (length(size.factors)==1) size.factors <- rep(size.factors, ncol(pars$dat)) else size.factors <- size.factors[pars$ccs]
-  }
+  } else size.factors <- NULL
 
   if (!contr.to.coef) {
     dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=pars$design)
-    if (missing(size.factors) || is.null(size.factors)) {
-      dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
+    if (is.null(size.factors)) {
+      if (is.null(ctrl.features)) {
+        dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, ...)
+      } else {
+        dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
+      }
     } else sizeFactors(dds) <- size.factors
-    fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
-    if (!is.null(pars$contrast)) {
-      de.res <- lapply(pars$contrast, function(x) pass3dots(DESeq2::results, fit, contrast=x, parallel=nc>1, BPPARAM=bp, ...))
-    } else if (!is.null(pars$coef)) {
-      de.res <- lapply(pars$coef, function(x) pass3dots(DESeq2::results, fit, name=x, parallel=nc>1, BPPARAM=bp, ...))
+    if (test=="LRT") {
+      fit <- lapply(pars$reduced.model, function(x) pass3dots(DESeq2::DESeq, dds, test=test, reduced=x, parallel=nc>1, BPPARAM=bp, ...))
+      de.res <- mapply(function(x,i) pass3dots(DESeq2::results, x, name=i, parallel=nc>1, BPPARAM=bp, ...), fit, pars$coef, SIMPLIFY=FALSE)
+    } else if (test=="Wald") {
+      fit <- pass3dots(DESeq2::DESeq, dds, test=test, parallel=nc>1, BPPARAM=bp, ...)
+      if (!is.null(pars$contrast)) {
+        de.res <- lapply(pars$contrast, function(x) pass3dots(DESeq2::results, fit, contrast=x, parallel=nc>1, BPPARAM=bp, ...))
+      } else if (!is.null(pars$coef)) {
+        de.res <- lapply(pars$coef, function(x) pass3dots(DESeq2::results, fit, name=x, parallel=nc>1, BPPARAM=bp, ...))
+      }
     }
   } else {
-    tmp <- mapply(function(design, coef) {
-      dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=design)
-      if (missing(size.factors) || is.null(size.factors)) {
-        dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
-      } else sizeFactors(dds) <- size.factors
-      fit <- pass3dots(DESeq2::DESeq, dds, parallel=nc>1, BPPARAM=bp, ...)
-      de.res <- pass3dots(DESeq2::results, fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
-      list(fit=fit, de.res=de.res)
-    }, pars$design, pars$coef, SIMPLIFY=FALSE)
+    if (test=="LRT") {
+      tmp <- mapply(function(design, reduced.model, coef) {
+        dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=design)
+        if (is.null(size.factors)) {
+          if (is.null(ctrl.features)) {
+            dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, ...)
+          } else {
+            dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
+          }
+        } else sizeFactors(dds) <- size.factors
+        fit <- pass3dots(DESeq2::DESeq, dds, test=test, reduced=reduced.model, parallel=nc>1, BPPARAM=bp, ...)
+        de.res <- pass3dots(DESeq2::results, fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
+        list(fit=fit, de.res=de.res)
+      }, pars$design, pars$reduced.model, pars$coef, SIMPLIFY=FALSE)
+    } else if (test=="Wald") {
+      tmp <- mapply(function(design, coef) {
+        dds <- DESeq2::DESeqDataSetFromMatrix(countData=pars$dat, colData=pars$pheno, design=design)
+        if (is.null(size.factors)) {
+          if (is.null(ctrl.features)) {
+            dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, ...)
+          } else {
+            dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
+          }
+        } else sizeFactors(dds) <- size.factors
+        fit <- pass3dots(DESeq2::DESeq, dds, test=test, parallel=nc>1, BPPARAM=bp, ...)
+        de.res <- pass3dots(DESeq2::results, fit, name=coef, parallel=nc>1, BPPARAM=bp, ...)
+        list(fit=fit, de.res=de.res)
+      }, pars$design, pars$coef, SIMPLIFY=FALSE)
+    }
     fit <- lapply(tmp, function(x) x$fit)
     de.res <- lapply(tmp, function(x) x$de.res)
   }
