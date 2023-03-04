@@ -129,10 +129,12 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
-  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
-  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # coef, contrast and reduced.model are different ways to specify the model coefficients or comparisons for which to test DE and return results, all can be provided as single items or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; see below for details;
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (i.e. an ANOVA/drop()-like test, depending on specific methods) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (e.g. sth like "grpA-grpB", in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1 (i.e. "joint" testing), which may be useful in some cases, but this requires the multiple contrasts are not collinear and probably require contr.to.coef=TRUE for many methods (not tested); for the common use case of separately checking multiple contrasts, pass them in a list numeric vectors (instead of a single contrast matrix) or a list of atom character vectors (instead of a single length>1 character vector)
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # currently, allowed to provide both coef and reduced.model, or otherwise at most one of the three; as long as reduced.model is provided, contrast will be ignored; if contrast is provided (w/o reduced.model), coef will be ignored; if none of these three is provided, will return results for all coefficients in the model;
+  # if both coef and reduced.model are provided, it's recommended that they are both named lists with distinct names; the results for both simply be combined in the order of coef, then reduced.model
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if TRUE then will try to get gene symbols automatically from fData(dat); if FALSE then will not try to get gene symbols; gene symbols will be added to the returned DE table
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
@@ -258,21 +260,24 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
 }
 
 
-.process.de.params <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, make.coef.names=FALSE) {
+.process.de.params <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, make.contr=TRUE, make.coef.names=FALSE) {
   # a common helper function to various de.* functions, preprocessing their input to prepare the design matrix and intended DE tests
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
   # pheno: phenotypic data as a data.table with the same order of samples
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
-  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
-  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # coef, contrast and reduced.model are different ways to specify the model coefficients or comparisons for which to test DE and return results, all can be provided as single items or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; see below for details;
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (i.e. an ANOVA/drop()-like test, depending on specific methods) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (e.g. sth like "grpA-grpB", in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1 (i.e. "joint" testing), which may be useful in some cases, but this requires the multiple contrasts are not collinear and probably require contr.to.coef=TRUE for many methods (not tested); for the common use case of separately checking multiple contrasts, pass them in a list numeric vectors (instead of a single contrast matrix) or a list of atom character vectors (instead of a single length>1 character vector)
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # currently, allowed to provide both coef and reduced.model, or otherwise at most one of the three; as long as reduced.model is provided, contrast will be ignored; if contrast is provided (w/o reduced.model), coef will be ignored; if none of these three is provided, will return results for all coefficients in the model;
+  # if both coef and reduced.model are provided, it's recommended that they are both named lists with distinct names; the results for both will be combined in the order of coef, then reduced.model
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
-  # make.coef.names: whether to apply make.names() to model coefficients -- set to TRUE for de.glmgampoi, which internally changes the names of the model variables
+  # make.contr: if FALSE, the character contrast input will be left as is without being converted to contrast vectors with limma::makeContrasts; this is for de.glmgampoi, where (for now) `contrast` has to be character if provided and if contr.to.coef=FALSE
+  # make.coef.names: whether to apply make.names() to model coefficients -- set to TRUE for de.deseq2, which somehow internally changes the names of the model variables (not sure whether also with make.names(), but converting coefs with make.names() works at least for the currently tested cases)
   # will return a list(dat, pheno, model, design, coef, contrast, reduced.model, ccs), where dat and pheno will contain only complete.cases wrt model variables, and ccs is the index for the complete cases wrt the original input dat/pheno;
-  # reduced.model in the returned list: if providing `coef` or `reduced.model`, or `contrast` with contr.to.coef=TRUE, this will be the reduced design matrix for de.deseq2 with LRT test, to be passed to the `reduced` argument of DESeq2::DESeq -- DESeq2 with LRT has a different workflow and required arguments from Wald test
+  # reduced.model in the returned list: if providing `coef` or `reduced.model`, or `contrast` with contr.to.coef=TRUE, this will be the reduced design matrix for de.glmgampoi to be passed to the `reduced_design` argument of glmGamPoi::test_de, or for de.deseq2 with LRT test, to be passed to the `reduced` argument of DESeq2::DESeq -- DESeq2 with LRT has a different workflow and required arguments from Wald test
 
   if (missing(design) || is.null(design)) {
     if (missing(pheno) || is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
@@ -300,10 +305,11 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
   }
 
   if (!(missing(reduced.model) || is.null(reduced.model))) {
-    if (!(missing(contrast) || is.null(contrast)) || !(missing(coef) || is.null(coef))) warning("`reduced.model` is provided, will ignore `contrast` and `coef`.")
-    contrast <- coef <- NULL
+    if (!(missing(contrast) || is.null(contrast))) warning("`reduced.model` is provided, will ignore `contrast`.")
+    contrast <- NULL
     if (!is.list(reduced.model)) reduced.model <- list(reduced.model)
-    coef <- lapply(reduced.model, function(x) {
+    if (is.null(names(reduced.model))) names(reduced.model) <- sapply(reduced.model, function(x) paste(as.character(x), collapse=" "))
+    tmp <- lapply(reduced.model, function(x) {
       if (class(x)=="formula") {
         if (is.null(pheno)) stop("Not using `pheno` with `model`, `reduced.model` cannot be a formula and can only be a single or a list of numeric/character vectors.")
         setdiff(colnames(design), colnames(model.matrix(x, pheno)))
@@ -313,13 +319,20 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
         colnames(design)[-x]
       } else stop("Invalid `reduced.model`, should be a single or a list of formulae or numeric/character vectors.")
     })
+    if (!(missing(coef) || is.null(coef))) {
+      if (!is.list(coef)) coef <- list(coef)
+      if (is.null(names(coef))) names(coef) <- sapply(coef, paste, collapse=" ")
+      coef <- c(coef, tmp)
+    } else coef <- tmp
   } else if (!(missing(contrast) || is.null(contrast))) {
     if (!(missing(coef) || is.null(coef))) warning("`contrast` is provided, will ignore `coef`.")
     reduced.model <- coef <- NULL
     if (!is.list(contrast)) contrast <- list(contrast)
-    contrast <- lapply(contrast, function(x) {
-      if (is.character(x)) makeContrasts(contrasts=x, levels=design, check.names=FALSE) else x # using my copy of makeContrasts
-    })
+    if (make.contr || contr.to.coef) {
+      contrast <- lapply(contrast, function(x) {
+        if (is.character(x)) makeContrasts(contrasts=x, levels=design, check.names=FALSE) else x # using my copy of makeContrasts
+      })
+    }
     if (contr.to.coef) {
       message("Reforming design matrix with limma::contrastAsCoef such that contrasts become coefficients.")
       tmp <- lapply(contrast, function(x) {
@@ -328,6 +341,7 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       })
       design <- lapply(tmp, function(x) x$design)
       coef <- lapply(tmp, function(x) x$coef)
+      contrast <- NULL
     }
   } else {
     reduced.model <- contrast <- NULL
@@ -337,8 +351,8 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       coef <- setNames(as.list(coef), coef)
     } else {
       if (!is.list(coef)) coef <- list(coef)
+      if (is.null(names(coef))) names(coef) <- sapply(coef, paste, collapse=" ")
     }
-    names(coef)[names(coef)=="(Intercept)"] <- "Intercept"
   }
 
   if (!is.null(coef)) {
@@ -348,6 +362,10 @@ get.tmm.log.cpm <- function(dat, prior.count=1) {
       if ("contrasts" %in% names(attributes(des))) attr(res, "contrasts") <- attr(des, "contrasts")
       res
     }, tmp, coef, SIMPLIFY=FALSE)
+    if (!is.null(names(coef))) {
+      names(coef)[names(coef)=="(Intercept)"] <- "Intercept"
+      names(reduced.model) <- names(coef)
+    }
     if (make.coef.names) {
       coef <- lapply(coef, function(x) {
         x[x=="(Intercept)"] <- "Intercept"
@@ -438,10 +456,12 @@ de.edger <- function(dat, pheno, model=~., design, coef, contrast, reduced.model
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
-  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
-  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
+  # coef, contrast and reduced.model are different ways to specify the model coefficients or comparisons for which to test DE and return results, all can be provided as single items or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; see below for details;
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (i.e. an ANOVA/drop()-like test, depending on specific methods) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (e.g. sth like "grpA-grpB", in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1 (i.e. "joint" testing), which may be useful in some cases, but this requires the multiple contrasts are not collinear and probably require contr.to.coef=TRUE for many methods (not tested); for the common use case of separately checking multiple contrasts, pass them in a list numeric vectors (instead of a single contrast matrix) or a list of atom character vectors (instead of a single length>1 character vector)
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # currently, allowed to provide both coef and reduced.model, or otherwise at most one of the three; as long as reduced.model is provided, contrast will be ignored; if contrast is provided (w/o reduced.model), coef will be ignored; if none of these three is provided, will return results for all coefficients in the model;
+  # if both coef and reduced.model are provided, it's recommended that they are both named lists with distinct names; the results for both will be combined in the order of coef, then reduced.model
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
   # ctrl.features: control features/genes that are expected to remain stable across conditions; if provided (i.e. not missing or NULL), will use my custom function .calc.norm.factors.with.ctrl instead of edge::calcNormFactors, and assign the result to dge@samples$norm.factors; for this, the normalization method (specified via `method` argument in ...) can only be "TMM" (default) or "RLE"
@@ -518,11 +538,13 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
-  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
-  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
-  # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
+  # coef, contrast and reduced.model are different ways to specify the model coefficients or comparisons for which to test DE and return results, all can be provided as single items or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; see below for details;
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (i.e. an ANOVA/drop()-like test, depending on specific methods) will be returned
+  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (e.g. sth like "grpA-grpB", in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1 (i.e. "joint" testing), which may be useful in some cases, but this requires the multiple contrasts are not collinear and probably require contr.to.coef=TRUE for many methods (not tested); for the common use case of separately checking multiple contrasts, pass them in a list numeric vectors (instead of a single contrast matrix) or a list of atom character vectors (instead of a single length>1 character vector)
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # currently, allowed to provide both coef and reduced.model, or otherwise at most one of the three; as long as reduced.model is provided, contrast will be ignored; if contrast is provided (w/o reduced.model), coef will be ignored; if none of these three is provided, will return results for all coefficients in the model;
+  # if both coef and reduced.model are provided, it's recommended that they are both named lists with distinct names; the results for both will be combined in the order of coef, then reduced.model
+  # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # test: type of test to perform; here I change the default (as in DESeq2::DESeq) from "Wald" to "LRT"
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, de.res=de.res), otherwise return de.res
@@ -634,11 +656,12 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # design: design matrix for DE
   # if design is NULL, pheno and model will be used to compute the design matrix; otherwise design will be used, and pheno with model will be ignored if provided; need to provide either pheno with model, or design
-  # coef, contrast and reduced.model are different ways to specify the model terms for which to perform DE test and to return DE results; provide at most one of these; if more than one is provided, will use reduced.model over contrast over coef; all can be provided as single items as described below or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; if none of these three is provided, will return results for all coefficients in the model
-  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (?) will be returned
-  # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix/multiple contrasts case is handled in the same way as the case of coef with length>1
-  # note: coef is passed to the `name` argument of DESeq2::results, while contrast is passed to the `contrast` argument of DESeq2::results; the character vector mode for contrast of DESeq2::results is not supported here (where, e.g. contrast=c("group", "trt", "ctrl") will return results for the 'trt' level compared to 'ctrl' level of the `group` variable)
+  # coef, contrast and reduced.model are different ways to specify the model coefficients or comparisons for which to test DE and return results, all can be provided as single items or lists of items (named lists recommended) for multiple tests, in which case a corresponding list of DE result tables will be returned; see below for details;
+  # coef: numeric or character vector of model coefficients (corresponding to columns of design matrix); if length>1, the coefficient (logFC) of each and a single P value for joint testing (i.e. an ANOVA/drop()-like test, depending on specific methods) will be returned
+  # contrast: character vector specifying one or more contrasts in terms of the column names of the design matrix (e.g. sth like "grpA-grpB"); for column names containing special characters (including e.g. interaction terms like a:b), please quote them with ``; however, if contr.to.coef=TRUE (see below), this can also be numeric contrast vector/matrix
   # reduced.model: formula of the reduced model (works only if pheno and model are provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop)
+  # currently, allowed to provide both coef and reduced.model, or otherwise at most one of the three; as long as reduced.model is provided, contrast will be ignored; if contrast is provided (w/o reduced.model), coef will be ignored; if none of these three is provided, will return results for all coefficients in the model;
+  # if both coef and reduced.model are provided, it's recommended that they are both named lists with distinct names; the results for both will be combined in the order of coef, then reduced.model
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
   # size.factors: passed to glmGamPoi::glm_gp `size_factors`, if missing use the default "normed_sum"
   # pseudobulk: passed to glmGamPoi::test_de `pseudobulk_by`
@@ -652,24 +675,27 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
 
   if (missing(size.factors)) size.factors <- "normed_sum"
 
-  pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
-  # glmGamPoi::test_de has a bug if requesting contrast="(Intercept)", so for now I will simply exclude the intercept if need to return all coefficients
-  if ("Intercept" %in% names(pars$coef)) pars$coef <- pars$coef[names(pars$coef)!="Intercept"]
-  if (any(sapply(pars$coef, function(x) "(Intercept)" %in% x))) stop("Currently, glmGamPoi::test_de has a bug that the intercept term cannot be requested.")
+  pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef, make.contr=FALSE)
+  # so glmGamPoi::test_de has some issue handling coefficients with special characters in their names, including `(Intercept)` and interaction terms like `a:b`, and the solution is simply to quote them with ``
+  if (!is.null(pars$coef)) pars$coef <- lapply(pars$coef, function(x) sprintf("`%s`", x))
 
   if (!contr.to.coef) {
     fit <- pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...)
     if (!is.null(pars$contrast)) {
       de.res <- lapply(pars$contrast, function(x) pass3dots(glmGamPoi::test_de, fit, contrast=x, pseudobulk_by=pseudobulk, ...))
     } else if (!is.null(pars$coef)) {
-      de.res <- lapply(pars$coef, function(x) pass3dots(glmGamPoi::test_de, fit, contrast=x, pseudobulk_by=pseudobulk, ...))
+      de.res <- mapply(function(coef, reduced.model) {
+        if (length(coef)==1) pass3dots(glmGamPoi::test_de, fit, contrast=coef, pseudobulk_by=pseudobulk, ...)
+          else pass3dots(glmGamPoi::test_de, fit, reduced_design=reduced.model, pseudobulk_by=pseudobulk, ...)
+      }, pars$coef, pars$reduced.model, SIMPLIFY=FALSE)
     }
   } else {
-    tmp <- mapply(function(design, coef) {
+    tmp <- mapply(function(design, coef, reduced.model) {
       fit <- pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=design, size_factors=size.factors, ...)
-      de.res <- pass3dots(glmGamPoi::test_de, fit, contrast=coef, pseudobulk_by=pseudobulk, ...)
+      if (length(coef)==1) de.res <- pass3dots(glmGamPoi::test_de, fit, contrast=coef, pseudobulk_by=pseudobulk, ...)
+          else de.res <- pass3dots(glmGamPoi::test_de, fit, reduced_design=reduced.model, pseudobulk_by=pseudobulk, ...)
       list(fit=fit, de.res=de.res)
-    }, pars$design, pars$coef, SIMPLIFY=FALSE)
+    }, pars$design, pars$coef, pars$reduced.model, SIMPLIFY=FALSE)
     fit <- lapply(tmp, function(x) x$fit)
     de.res <- lapply(tmp, function(x) x$de.res)
   }
@@ -835,8 +861,7 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
   tmp <- Matrix::sparseMatrix(i=1:length(blk), j=as.numeric(blk), dims=c(length(blk), length(levels(blk))), dimnames=list(NULL, levels(blk)))
   mat <- as.matrix(mat %*% tmp)
   tmp <- sapply(mdat, function(x) any(colSums(table(x, blk)>0)>1))
-  if (any(tmp)) message(sprintf("These variables will be dropped since they have multiple values/levels within a bulk:\n%s\n", paste(names(mdat)[tmp], collapse=", "))
-)
+  if (any(tmp)) message(sprintf("These variables will be dropped since they have multiple values/levels within a bulk:\n%s\n", paste(names(mdat)[tmp], collapse=", ")))
   mdat[, blk:=blk]
   mdat <- unique(mdat[, !tmp, with=FALSE])[match(colnames(mat), blk), -"blk"]
   list(mat=mat, mdat=mdat)
