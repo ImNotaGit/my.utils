@@ -719,7 +719,8 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
   # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
   # cdr: whether to include cellular detection rate (i.e. fraction of >0 genes in each cell) as a covariate
   # coef: character vector of model coefficients to test for and to return, e.g. each can be the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group;
-  # or a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
+  # if more than one coef is provided, will return p values for the LR test for dropping all of the provided coefs, in this case the logFC returned probably won't be very meaningful
+  # or coef can be a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
   # if length of coef is >1, the returned de.res will be a list of DE result tables named by coef; otherwise de.res will be a single table
   # lfc.cutoff: a non-negative number, lower cutoff for log fold-change (will return genes whose log fold-change >= this value); if set >0, the P values will no longer be valid
   # pos.only: if TRUE, will return genes with log fold-change >= lfc.cutoff; otherwise, return genes with abs(log fold-change) >= lfc.cutoff
@@ -735,6 +736,7 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
 
   if (missing(design)) {
     if (missing(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
+    pheno <- as.data.table(pheno)
     #vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
     #vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
     vs <- all.vars(model)
@@ -769,21 +771,18 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
     if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
     coef <- make.names(coef)
     c0 <- setNames(ifelse(colnames(design)==make.names("(Intercept)"), 1, 0), colnames(design))
-    c1 <- as.matrix(setNames(ifelse(colnames(design)==coef, 1, 0), colnames(design)))
-    colnames(c1) <- coef
-    # add intercept to c1
-    c1 <- c1 + c0
+    c1 <- as.matrix(setNames(ifelse(colnames(design) %in% c(coef, make.names("(Intercept)")), 1, 0), colnames(design)))
+    if (length(coef)==1) colnames(c1) <- coef1 <- coef else colnames(c1) <- coef1 <- "x"
     args.getlfc <- list(contrast0=c0, contrast1=c1)
-    args.lrt <- list(hypothesis=MAST::CoefficientHypothesis(coef))
-    coef1 <- coef
+    #args.lrt <- list(hypothesis=MAST::CoefficientHypothesis(coef))
+    args.lrt <- list(hypothesis=c1-c0)
   } else if (is.list(coef)) {
     coef <- lapply(coef, function(x) setNames(x, make.names(names(x))))
-    c0 <- as.matrix(coef[[1]])
-    c1 <- as.matrix(coef[[2]])[rownames(c0), , drop=FALSE]
-    colnames(c0) <- colnames(c1) <- "x"
-    args.getlfc <- list(contrast0=coef[[1]], contrast1=c1)
+    c0 <- coef[[1]]
+    c1 <- as.matrix(coef[[2]])[names(c0), , drop=FALSE]
+    colnames(c1) <- coef1 <- "x"
+    args.getlfc <- list(contrast0=c0, contrast1=c1)
     args.lrt <- list(hypothesis=c1-c0)
-    coef1 <- "x"
   }
   
   if (lfc.cutoff>0 || pos.only) {
