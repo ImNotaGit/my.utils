@@ -109,7 +109,7 @@ wilcox <- function(arg1, arg2=NULL, ...) {
     data.table(r.wilcox=wilcox.r, pval=wilcox.p)
 
   }, error=function(e) {
-    data.table(r.wilcox=NA, pval=NA)
+    data.table(r.wilcox=NA_real_, pval=NA_real_)
   })
 
 }
