@@ -719,9 +719,9 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
   # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
   # cdr: whether to include cellular detection rate (i.e. fraction of >0 genes in each cell) as a covariate
   # coef: character vector of model coefficients to test for and to return, e.g. each can be the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group;
-  # if more than one coef is provided, will return p values for the LR test for dropping all of the provided coefs, in this case the logFC returned probably won't be very meaningful
-  # or coef can be a list of two contrast vectors, each named by the colnames of the design matrix, the first corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated)
-  # if length of coef is >1, the returned de.res will be a list of DE result tables named by coef; otherwise de.res will be a single table
+  # if more than one coef is provided (i.e. length>1 character vector), will return p values for the LR test for dropping all of the provided coefs, in this case the logFC returned probably won't be very meaningful
+  # or coef can be a two-column matrix of two "contrast" vectors, with rows named by the colnames of the design matrix; the first "contrast" corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated), and will test the contrast #2-#1
+  # if coef is a (possibly named) list of length>1 containing the above objects, the returned de.res will be a (named) list of DE result tables in the corresponding order; otherwise de.res will be a single table
   # lfc.cutoff: a non-negative number, lower cutoff for log fold-change (will return genes whose log fold-change >= this value); if set >0, the P values will no longer be valid
   # pos.only: if TRUE, will return genes with log fold-change >= lfc.cutoff; otherwise, return genes with abs(log fold-change) >= lfc.cutoff
   # *note: I include lfc.cutoff and pos.only arguments here (rather than downstream) because I want to filter genes before doing LR test to save time (if p values are needed)
@@ -767,28 +767,31 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
   if (nc>1) options(mc.cores=nc)
   zlm.fit <- MAST::zlm(formula=model, sca=sca, parallel=isTRUE(nc>1), ...)
   
-  if (is.character(coef)) {
-    if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
-    coef <- make.names(coef)
-    c0 <- setNames(ifelse(colnames(design)==make.names("(Intercept)"), 1, 0), colnames(design))
-    c1 <- as.matrix(setNames(ifelse(colnames(design) %in% c(coef, make.names("(Intercept)")), 1, 0), colnames(design)))
-    if (length(coef)==1) colnames(c1) <- coef1 <- coef else colnames(c1) <- coef1 <- "x"
-    args.getlfc <- list(contrast0=c0, contrast1=c1)
-    #args.lrt <- list(hypothesis=MAST::CoefficientHypothesis(coef))
-    args.lrt <- list(hypothesis=c1-c0)
-  } else if (is.list(coef)) {
-    coef <- lapply(coef, function(x) setNames(x, make.names(names(x))))
-    c0 <- coef[[1]]
-    c1 <- as.matrix(coef[[2]])[names(c0), , drop=FALSE]
-    colnames(c1) <- coef1 <- "x"
-    args.getlfc <- list(contrast0=c0, contrast1=c1)
-    args.lrt <- list(hypothesis=c1-c0)
-  }
+  if (!is.list(coef)) coef <- list(coef)
+  args.summ <- lapply(coef, function(x) {
+    if (is.matrix(x)) {
+      if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
+      c0 <- setNames(x[,1], make.names(rownames(x)))[colnames(design)]
+      c1 <- as.matrix(setNames(x[,2], make.names(rownames(x)))[colnames(design)])
+      colnames(c1) <- coef1 <- "x"
+      args.getlfc <- list(contrast0=c0, contrast1=c1)
+      args.lrt <- list(hypothesis=c1-c0)
+    } else if (is.character(x)) {
+      if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
+      x <- make.names(x)
+      c0 <- setNames(ifelse(colnames(design)==make.names("(Intercept)"), 1, 0), colnames(design))
+      c1 <- as.matrix(setNames(ifelse(colnames(design) %in% c(x, make.names("(Intercept)")), 1, 0), colnames(design)))
+      if (length(x)==1) colnames(c1) <- coef1 <- x else colnames(c1) <- coef1 <- "x"
+      args.getlfc <- list(contrast0=c0, contrast1=c1)
+      args.lrt <- list(hypothesis=MAST::CoefficientHypothesis(x))
+    }
+    list(getlfc=args.getlfc, lrt=args.lrt, coef1=coef1)
+  })
   
   if (lfc.cutoff>0 || pos.only) {
     # pre-filtering genes before doing statistical tests to save time
     if (lfc.cutoff>0 && !lfc.only) warning("Filtering genes based on log fold-change, P values no longer valid.")
-    if (pos.only) gidx <- do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc))[contrast==coef1, logFC>=lfc.cutoff] else gidx <- do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc))[contrast==coef1, abs(logFC)>=lfc.cutoff]
+    if (pos.only) gidx <- do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.summ[[1]]$getlfc))[contrast==args.summ[[1]]$coef1, logFC>=lfc.cutoff] else gidx <- do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.summ[[1]]$getlfc))[contrast==args.summ[[1]]$coef1, abs(logFC)>=lfc.cutoff]
     gidx[is.na(gidx)] <- FALSE
     if (sum(gidx)==0) {
       warning("No gene passes log fold-change cutoff, NULL returned.")
@@ -803,35 +806,44 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
     zlm.fit@sca <- zlm.fit@sca[gidx, ]
   }
   
-  if (lfc.only) {
-    zlm.summ <- MAST::summary(zlm.fit, logFC=do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc)), doLRT=FALSE)$datatable
-    if (nc>1) options(mc.cores=nc.bak) # reset
-    # discrete component (logistic)
-    de.res <- zlm.summ[contrast==coef1 & component=='D', .(id=primerid, coef.d=coef, ci95lo.d=ci.lo, ci95up.d=ci.hi)]
-    # continuous component
-    tmp <- zlm.summ[contrast==coef1 & component=='C', .(id=primerid, coef.c=coef, ci95lo.c=ci.lo, ci95up.c=ci.hi)]
-    de.res <- merge(de.res, tmp, by="id")
-    # logFC
-    tmp <- zlm.summ[contrast==coef1 & component=='logFC', .(id=primerid, log.fc=coef, ci95lo.lfc=ci.lo, ci95up.lfc=ci.hi)]
-    de.res <- merge(de.res, tmp, by="id")
-  } else {
-    zlm.summ <- MAST::summary(zlm.fit, logFC=do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), args.getlfc)), doLRT=setNames(list(do.call(MAST::lrTest, c(list(object=zlm.fit), args.lrt))), coef1), parallel=isTRUE(nc>1))$datatable
-    if (nc>1) options(mc.cores=NULL) # reset
-    # discrete component (logistic)
-    de.res <- zlm.summ[contrast==coef1 & component=='D', .(id=primerid, coef.d=coef, ci95lo.d=ci.lo, ci95up.d=ci.hi, pval.d=`Pr(>Chisq)`)][, padj.d:=p.adjust(pval.d, "BH")]
-    # continuous component
-    tmp <- zlm.summ[contrast==coef1 & component=='C', .(id=primerid, coef.c=coef, ci95lo.c=ci.lo, ci95up.c=ci.hi, pval.c=`Pr(>Chisq)`)][, padj.c:=p.adjust(pval.c, "BH")]
-    de.res <- merge(de.res, tmp, by="id")
-    # logFC
-    tmp <- merge(
-      zlm.summ[contrast==coef1 & component=='logFC', .(id=primerid, log.fc=coef, ci95lo.lfc=ci.lo, ci95up.lfc=ci.hi)],
-      zlm.summ[contrast==coef1 & component=='H', .(id=primerid, pval=`Pr(>Chisq)`)][, padj:=p.adjust(pval, "BH")],
-      by="id"
-    )
-    de.res <- merge(de.res, tmp, by="id")
+  res <- lapply(args.summ, function(x) {
+    if (lfc.only) {
+      zlm.summ <- MAST::summary(zlm.fit, logFC=do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), x$getlfc)), doLRT=FALSE)$datatable
+      if (nc>1) options(mc.cores=nc.bak) # reset
+      # discrete component (logistic)
+      de.res <- zlm.summ[contrast==x$coef1 & component=='D', .(id=primerid, coef.d=coef, ci95lo.d=ci.lo, ci95up.d=ci.hi)]
+      # continuous component
+      tmp <- zlm.summ[contrast==x$coef1 & component=='C', .(id=primerid, coef.c=coef, ci95lo.c=ci.lo, ci95up.c=ci.hi)]
+      de.res <- merge(de.res, tmp, by="id")
+      # logFC
+      tmp <- zlm.summ[contrast==x$coef1 & component=='logFC', .(id=primerid, log.fc=coef, ci95lo.lfc=ci.lo, ci95up.lfc=ci.hi)]
+      de.res <- merge(de.res, tmp, by="id")
+    } else {
+      zlm.summ <- MAST::summary(zlm.fit, logFC=do.call(MAST::getLogFC, c(list(zlmfit=zlm.fit), x$getlfc)), doLRT=setNames(list(do.call(MAST::lrTest, c(list(object=zlm.fit), x$lrt))), x$coef1), parallel=isTRUE(nc>1))$datatable
+      if (nc>1) options(mc.cores=NULL) # reset
+      # discrete component (logistic)
+      de.res <- zlm.summ[contrast==x$coef1 & component=='D', .(id=primerid, coef.d=coef, ci95lo.d=ci.lo, ci95up.d=ci.hi, pval.d=`Pr(>Chisq)`)][, padj.d:=p.adjust(pval.d, "BH")]
+      # continuous component
+      tmp <- zlm.summ[contrast==x$coef1 & component=='C', .(id=primerid, coef.c=coef, ci95lo.c=ci.lo, ci95up.c=ci.hi, pval.c=`Pr(>Chisq)`)][, padj.c:=p.adjust(pval.c, "BH")]
+      de.res <- merge(de.res, tmp, by="id")
+      # logFC
+      tmp <- merge(
+        zlm.summ[contrast==x$coef1 & component=='logFC', .(id=primerid, log.fc=coef, ci95lo.lfc=ci.lo, ci95up.lfc=ci.hi)],
+        zlm.summ[contrast==x$coef1 & component=='H', .(id=primerid, pval=`Pr(>Chisq)`)][, padj:=p.adjust(pval, "BH")],
+        by="id"
+      )
+      de.res <- merge(de.res, tmp, by="id")
+    }
+    #de.res <- de.res[order(-abs(log.fc))]
+    de.res <- de.res[order(padj, pval)]
+    list(summ=zlm.summ, de.res=de.res)
+  })
+  zlm.summ <- lapply(res, function(x) x$summ)
+  de.res <- lapply(res, function(x) x$de.res)
+  if (length(de.res)==1) {
+    de.res <- de.res[[1]]
+    zlm.summ <- zlm.summ[[1]]
   }
-  #de.res <- de.res[order(-abs(log.fc))]
-  de.res <- de.res[order(padj, pval)]
   if (keep.fit) list(fit=zlm.fit, summ=zlm.summ, de.res=de.res) else de.res
 }
 
