@@ -760,10 +760,10 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
     printed.var <- 1
     set.size <- summ$n.vars[1]
     res <- data.table()
+    x.vars <- rownames(summ$coef.mat)[printed.var:(printed.var+set.size-1)]
     for (i in seq_along(summ$varnames)) {
       if (i==summ$base) {
-        tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE] # only to use its rownames
-        res <- rbind(res, data.table(id=summ$varnames[i], x.var=rownames(tmp)), fill=TRUE)
+        res <- rbind(res, data.table(id=summ$varnames[i], x.var=x.vars), fill=TRUE)
       } else {
         tmp <- summ$coef.mat[printed.var:(printed.var+set.size-1), , drop=FALSE]
         res <- rbind(res, cbind(id=summ$varnames[i], x.var=rownames(tmp), as.data.table(tmp)), fill=TRUE)
