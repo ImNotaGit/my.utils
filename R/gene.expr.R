@@ -871,7 +871,7 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
   blk <- factor(blk)
   tmp <- Matrix::sparseMatrix(i=1:length(blk), j=as.numeric(blk), dims=c(length(blk), length(levels(blk))), dimnames=list(NULL, levels(blk)))
   mat <- as.matrix(mat %*% tmp)
-  tmp <- sapply(mdat, function(x) any(colSums(table(x, blk)>0)>1))
+  tmp <- sapply(mdat, function(x) any(colSums(table(x, blk, useNA="ifany")>0)>1))
   if (any(tmp)) message(sprintf("These variables will be dropped since they have multiple values/levels within a bulk:\n%s\n", paste(names(mdat)[tmp], collapse=", ")))
   mdat[, blk:=blk]
   mdat <- unique(mdat[, !tmp, with=FALSE])[match(colnames(mat), blk), -"blk"]
