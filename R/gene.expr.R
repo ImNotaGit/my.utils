@@ -199,8 +199,8 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   }
 
   de.res <- lapply(de.res, function(x) {
+    if (!"id" %in% tolower(names(x))) x <- cbind(ID=row.names(x), x)
     res <- as.data.table(x)
-    if (!"id" %in% tolower(names(res))) res <- cbind(ID=row.names(res), res)
     setnames(res, c("ID","logFC","AveExpr","P.Value","adj.P.Val"), c("id","log.fc","ave.expr","pval","padj"), skip_absent=TRUE)
     res[order(padj, pval)]
   })
@@ -767,17 +767,16 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
   if (nc>1) options(mc.cores=nc)
   zlm.fit <- MAST::zlm(formula=model, sca=sca, parallel=isTRUE(nc>1), ...)
   
+  if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
   if (!is.list(coef)) coef <- list(coef)
   args.summ <- lapply(coef, function(x) {
     if (is.matrix(x)) {
-      if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
       c0 <- setNames(x[,1], make.names(rownames(x)))[colnames(design)]
       c1 <- as.matrix(setNames(x[,2], make.names(rownames(x)))[colnames(design)])
       colnames(c1) <- coef1 <- "x"
       args.getlfc <- list(contrast0=c0, contrast1=c1)
       args.lrt <- list(hypothesis=c1-c0)
     } else if (is.character(x)) {
-      if (missing(design)) design <- zlm.fit@LMlike@modelMatrix
       x <- make.names(x)
       c0 <- setNames(ifelse(colnames(design)==make.names("(Intercept)"), 1, 0), colnames(design))
       c1 <- as.matrix(setNames(ifelse(colnames(design) %in% c(x, make.names("(Intercept)")), 1, 0), colnames(design)))
@@ -853,17 +852,18 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
   # mat: gene-by-cell matrix (assuming sparse)
   # mdat: cell meta data, data.frame or other objects coerceable to data.table
   # blk: names of one or more sample/bulk variables (as in column names of mdat)
-  # ncells.cutoff: only keep samples/bulks with > this number of cells
+  # ncells.cutoff: only keep samples/bulks with >= this number of cells
   # return: list(mat=mat, mdat=mdat), where mat is the pseudobulk gene-by-sample/bulk matrix, mdat is the corresponding meta data for the pseudobulk samples, the latter is obtained by dropping any variables (columns) with non-unique values within a bulk from the original cell-level mdat
 
   mdat <- as.data.table(mdat)
   tmp <- sapply(blk, function(i) anyNA(mdat[, i, with=FALSE]))
   if (any(tmp)) warning(sprintf("These bulk variables contain NA! NA will be kept as a separate level:\n%s\n", paste(blk[tmp], collapse=", ")))
   blk <- do.call(paste, c(unname(as.list(mdat[, blk, with=FALSE])), list(sep="_")))
-  tmp <- table(blk)>ncells.cutoff
+  tmp <- table(blk)>=ncells.cutoff
   if (any(!tmp)) {
+    warning(sprintf("These bulks contain <%d cells, they will be discarded:\n%s\n", ncells.cutoff, paste(names(tmp)[!tmp], collapse=", ")))
+    if (all(!tmp)) stop("All bulks contain <%d cells, no sample is left.", ncells.cutoff)
     idx <- blk %in% names(tmp)[tmp]
-    warning(sprintf("These bulks contain <=%d cell, they will be discarded:\n%s\n", ncells.cutoff, paste(names(tmp)[!tmp], collapse=", ")))
     blk <- blk[idx]
     mdat <- mdat[idx]
     mat <- mat[, idx, drop=FALSE]
