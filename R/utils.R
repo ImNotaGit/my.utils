@@ -59,6 +59,13 @@ dt2mat <- function(x, rn=1, rm=1) {
 }
 
 
+mat2dt <- function(x, rn="id") {
+  # convert a matrix to data.table, rownames of the matrix will become the first column of the data.table, using rn as the name of the first column
+  res <- cbind(rownames(x), as.data.table(x))
+  if (!is.null(rownames(x))) setnames(res, 1, rn) else res
+}
+
+
 write.tab <- function(x, file, cn=TRUE, rn=FALSE, sep="\t", quote="auto", append=FALSE) {
   # write table with changed defaults
   tryCatch(fwrite(x, file=file, append=append, quote=quote, sep=sep, na="NA", col.names=cn, row.names=rn),
@@ -319,13 +326,16 @@ qlapply <- function(f, ..., pkgs=c(), njobs, mem=16, config=list(P="short"), fai
 
 apply1 <- function(dat, pheno, f, ..., var.name="y", arg.name="dat", nc=1L) {
   # dat is a gene(feature)-by-sample matrix; pheno is a data.table of sample-level covariates; this function will apply a function f (one of the run.* functions) for certain statistical testing to each gene/feature
-  # each gene/feature will be added to pheno as a new column named var.name, and the resulting data will be passed to the arg.name argument of f; provide additional arguments to f in ...
-  # e.g. apply1(mat, data.table(group=factor(sth, levels=c("control","treated"))), run.lm, model=y~group, coef="grouptreated")
+  # each gene/feature will be added to pheno as a new column named var.name, and the resulting data will be passed to the arg.name argument of f; provide additional arguments to f in ..., for the `model` argument, omit the left-hand side (i.e. instead of y~x, write ~x as in the de.* functions)
+  # e.g. apply1(mat, data.table(group=factor(sth, levels=c("control","treated"))), run.lm, model=~group, coef="grouptreated")
   # this function will rbind all f outputs, adding an "id" column of gene/feature name (using the rownames of dat or dat$expr), add BH-adjusted p value with adjust.pval() then order by padj as output
   # nc: number of cores
 
   args <- list(...)
   args$dat <- copy(pheno)
+  if ("model" %in% names(args)) {
+    args$model <- as.formula(paste(var.name, paste(as.character(args$model), collapse=" ")))
+  }
 
   cl <- makeCluster(nc, type="FORK")
   res <- rbindlist(parApply(cl, dat, 1, function(x) {

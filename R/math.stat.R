@@ -62,31 +62,9 @@ trans4m <- function(dat, method=inv.norm, by=21) {
 }
 
 
-wilcox <- function(arg1, arg2=NULL, ...) {
-  # run Wilcoxon test on two samples, return a named vector with the p value and the rank-biserial correlation for the test. The two samples can be given as two vectors in arg1 and arg2, but can also be provided in the formula form with the formula in arg1, and an optional data.frame-like object in arg2. The ... is to be passed to wilcox.test() as extra arguments and should be named.
+wilcox <- function(s1, s2, ...) {
+  # run Wilcoxon test on two samples given as two vectors in s1 and s2, return a data.table with the rank-biserial correlation and p value for the test.
 
-  # NOTE: in case of formula and data.frame, although I can pass them directly to wilcox.test, I choose to extract the two samples explicitly, based on the order of the levels of the group factor (again, although this is the same default behavior of wilcox.test).
-
-  # if arg1 and arg2 are both vectors
-  if (is.vector(arg1) && is.vector(arg2)) {
-    s1 <- arg1
-    s2 <- arg2
-  } else if (inherits(arg1, "formula")) {
-    if (is.data.frame(arg2)) {
-      # if arg1 is a formula and arg2 is a data.frame-like object, assume arg1 is sth as simple as y~x
-      group <- factor(arg2[[deparse(arg1[[3]])]]) # make sure group is a factor. the order of levels won't change if it is already a factor
-      value <- arg2[[deparse(arg1[[2]])]]
-    } else {
-      # if arg1: formula, but arg2: not data.frame-like, assume arg1 is sth like dat$y~dat$x
-      group <- factor(eval(arg1[[3]])) # make sure group is a factor. the order of levels won't change if it is already a factor
-      value <- eval(arg1[[2]])
-    }
-    # the two samples
-    s1 <- value[group==levels(group)[1]]
-    s2 <- value[group==levels(group)[2]]
-  }
-
-  # run wilcox test
   tryCatch({
 
     wilcox.res <- wilcox.test(s1, s2, ...)
@@ -109,49 +87,27 @@ wilcox <- function(arg1, arg2=NULL, ...) {
     data.table(r.wilcox=wilcox.r, pval=wilcox.p)
 
   }, error=function(e) {
+    message(e)
+    message("NA's returned.")
     data.table(r.wilcox=NA_real_, pval=NA_real_)
   })
 
 }
 
 
-wilcox3 <- function(arg1, arg2=NULL, arg3=NULL, ...) {
-  # run Wilcoxon test on three samples, return a named vector with the p value and the rank-biserial correlation for the test. The samples can be given as three vectors in arg1-3, but can also be provided in the formula form with the formula in arg1, and an optional data.frame-like object in arg2. The ... is to be passed to wilcox.test() as extra arguments and should be named.
+wilcox3 <- function(s1, s2, s3, snames=NULL, ...) {
+  # run Wilcoxon test on three samples given as three vectors in s1-s3, return a data.table with the rank-biserial correlations and p values for all pairs of tests
+  # snames: if not NULL, should be a length-3 vector of the names for s1-s3
 
-  # as in my wilcox(), extract the two samples explicitly, based on the order of the levels of the group factor.
-  # if arg1-3 all vectors
-  if (is.vector(arg1) && is.vector(arg2) && is.vector(arg3)) {
-    s1 <- arg1
-    s2 <- arg2
-    s3 <- arg3
-  } else if (inherits(arg1, "formula")) {
-    if (is.data.frame(arg2)) {
-      # if arg1 is a formula and arg2 is a data.frame-like object, assume arg1 is sth as simple as y~x
-      group <- factor(arg2[[deparse(arg1[[3]])]]) # make sure group is a factor. the order of levels won't change if it is already a factor
-      value <- arg2[[deparse(arg1[[2]])]]
-    } else {
-      # if arg1: formula, but arg2: not data.frame-like, assume arg1 is sth like dat$y~dat$x
-      group <- factor(eval(arg1[[3]])) # make sure group is a factor. the order of levels won't change if it is already a factor
-      value <- eval(arg1[[2]])
-    }
-    # the samples
-    gpl <- levels(group)
-    s1 <- value[group==gpl[1]]
-    s2 <- value[group==gpl[2]]
-    s3 <- value[group==gpl[3]]
-  }
-
-  # run wilcox.test for all pairs, using my wilcox()
   w12 <- wilcox(s1, s2, ...)
   w23 <- wilcox(s2, s3, ...)
   w13 <- wilcox(s1, s3, ...)
   # labels for group comparisons
-  if (exists("gpl")) {
-    lab <- c(paste(gpl[1],gpl[2],sep=" vs "), paste(gpl[2],gpl[3],sep=" vs "), paste(gpl[1],gpl[3],sep=" vs "))
-  } else lab <- c("12", "23", "13")
-  res <- as.data.table(rbind(w12, w23, w13))
-  res[, compare:=lab]
-  setcolorder(res, c("compare", "r.wilcox", "pval"))
+  if (!is.null(snames)) {
+    lab <- c(paste(snames[1],snames[2],sep=" vs "), paste(snames[2],snames[3],sep=" vs "), paste(snames[1],snames[3],sep=" vs "))
+  } else lab <- c("1vs2", "2vs3", "1vs3")
+  res <- cbind(comparison=lab, rbind(w12, w23, w13))
+  res[, padj:=p.adjust(pval, "BH")]
   return(res)
 }
 
@@ -551,6 +507,44 @@ gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, nc=1L, ...) {
     res <- fgsea::fgsea(pathways=gsets, stats=x, ...)
   }
   res[order(padj,pval)]
+}
+
+
+run.wilcox <- function(dat, model, ...) {
+  # run Wilcoxon test for 2 or 3 groups, return a data.table with the p value and the rank-biserial correlation for the test.
+  # dat: a data.table; model: formula for the wilcoxon test, e.g. y~x where y contains the data values and x defines the groups
+
+  # NOTE: although I can pass dat and model directly to wilcox.test, I choose to extract the groups explicitly, based on the order of the levels of the group factor (again, although this is the same default behavior of wilcox.test).
+
+  group <- factor(dat[[deparse(model[[3]])]]) # make sure group is a factor. the order of levels won't change if it is already a factor
+  value <- dat[[deparse(model[[2]])]]
+  grps <- levels(group)
+  if (length(grps)==2) {
+    s1 <- value[group==grps[1]]
+    s2 <- value[group==grps[2]]
+    res <- wilcox(s1, s2, ...)
+  } else if (length(grps)==3) {
+    s1 <- value[group==grps[1]]
+    s2 <- value[group==grps[2]]
+    s3 <- value[group==grps[3]]
+    res <- wilcox3(s1, s2, s3, snames=grps, ...)
+  } else {
+    stop("The number of groups to be compared should be 2 or 3.")
+  }
+  res
+}
+
+
+run.cor <- function(dat, model, ...) {
+  # run cor.test
+  # dat: a data.table; model: formula for the test, e.g. y~x where x and y are the two variables to correlate with each other, note that the order doesn't matter; this format is different from that of cor.test for formula
+
+  y <- dat[[deparse(model[[2]])]]
+  x <- dat[[deparse(model[[3]])]]
+  tmp <- cor.test(x, y, ...)
+  res <- data.table(est=tmp$estimate, pval=tmp$p.value)
+  setnames(res, "est", if (names(tmp$estimate)=="cor") "r" else names(tmp$estimate))
+  res
 }
 
 
