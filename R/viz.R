@@ -88,7 +88,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
     md <- mahalanobis(mat.pc, colMeans(mat.pc), cov(mat.pc))
     cutoff <- qchisq(p=1-outliers.cutoff, df=ncol(mat.pc))
     id.outliers <- which(md>cutoff)
-    label.subset <- union(label.subset, id.outliers)
+    if (!is.null(label.subset)) label.subset <- union(label.subset, id.outliers)
   }
 
   p <- ggplot(dat, aes(x=x, y=y)) +
