@@ -548,12 +548,12 @@ run.cor <- function(dat, model, ...) {
 }
 
 
-run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fit) {
+run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
   # helper function for constructing the various run* functions
   # coef: if missing or NULL, will return results for all coefficients in the model
 
   tmp <- list(...)
-  args <- c(list(formula=model, data=dat), tmp[names(tmp) %in% names(formals(f))])
+  args <- tmp[names(tmp) %in% names(formals(f))]
 
   tryCatch({
     fit <- do.call(f, args)
@@ -578,15 +578,27 @@ run.f <- function(f, dat, model, coef, ..., drop.test="none", drop=coef, keep.fi
 }
 
 
-run.lm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chisq","F"), drop=coef, keep.fit=FALSE) {
+run.lm <- function(dat, model = y ~ x*z, design=NULL, y=NULL, ..., coef="x", drop.test=c("none","Chisq","F"), drop=coef, keep.fit=FALSE) {
   # perform a linear regression (wrapper around lm)
-  # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
+  # dat: a data.table containing covariates; model: formula for regression;
+  # coef: for which variable/term should the regression coefficient and p value be returned;
+  # the default values of model and coef are intended to be an example
+  # alternatively, provide design (design/model matrix) and y (vector of dependent variable values) instead of model and dat; but can also keep dat and provide y as the name of the dependent variable in dat
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lm() can also be provided here, so need to be careful to avoid any name conflicts
   # drop.test: whether to use p value from a test based on nested models (F test or likelihood ratio test) by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(lm()), i.e. based on t test
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   drop.test <- match.arg(drop.test)
-  run.f(f=lm, dat=dat, model=model, coef=coef, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  if (is.null(design)) {
+    run.f(f=lm, data=dat, formula=model, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  } else {
+    colnames(design) <- make.names(colnames(design))
+    design <- as.data.frame(design)
+    model <- as.formula(sprintf("`_y` ~ %s + 0", paste(sprintf("`%s`", colnames(design)), collapse=" + ")))
+    if (is.character(y)) y <- dat[[y]]
+    design <- cbind(`_y`=y, design)
+    run.f(f=lm, data=design, formula=model, ..., coef=make.names(coef), drop.test=drop.test, drop=make.names(drop), keep.fit=keep.fit)
+  }
 }
 
 
@@ -597,19 +609,27 @@ run.lmer <- function(dat, model = y ~ x + (x|cluster), coef="x", ..., keep.fit=F
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   library(lmerTest) # the package was imported but not attached; attach it if this function is called
-  run.f(f=lmer, dat=dat, model=model, coef=coef, ..., keep.fit=keep.fit)
+  run.f(f=lmer, data=dat, formula=model, ..., coef=coef, keep.fit=keep.fit)
 }
 
 
-run.glm <- function(dat, model = y ~ x*z, coef="x", family=binomial, ..., drop.test=c("none","Chisq","F","Rao"), drop=coef, keep.fit=FALSE) {
+run.glm <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binomial, ..., coef="x", drop.test=c("none","Chisq","F","Rao"), drop=coef, keep.fit=FALSE) {
   # fit a generalized linear model (wrapper around glm); family default to binomial for logistic regression
-  # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
+  # dat: a data.table containing covariates; model: formula for regression;
+  # coef: for which variable/term should the regression coefficient and p value be returned;
+  # the default values of model and coef are intended to be an example
+  # alternatively, provide design (design/model matrix) and y (vector of dependent variable values) instead of model and dat; but can also keep dat and provide y as the name of the dependent variable in dat
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to glm() can also be provided here, so need to be careful to avoid any name conflicts
   # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(glm()), i.e. based on Wald test that may be problematic for small sample size
   # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   drop.test <- match.arg(drop.test)
-  run.f(f=glm, dat=dat, model=model, coef=coef, family=family, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  if (is.null(design)) {
+    run.f(f=glm, data=dat, formula=model, family=family, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  } else {
+    if (is.character(y)) y <- dat[[y]]
+    run.f(f=glm.fit, x=design, y=y, family=family, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  }
 }
 
 
@@ -622,7 +642,7 @@ run.clm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chi
 
   library(ordinal) # the package was imported but not attached; attach it if this function is called
   drop.test <- match.arg(drop.test)
-  run.f(f=clm, dat=dat, model=model, coef=coef, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  run.f(f=clm, data=dat, formula=model, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
 }
 
 
@@ -635,7 +655,7 @@ run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata
 
   library(survival) # the package was imported but not attached; attach it if this function is called
   drop.test <- match.arg(drop.test)
-  run.f(f=coxph, dat=dat, model=model, coef=coef, ..., drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  run.f(f=coxph, data=dat, formula=model, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
 }
 
 get.survdiff.pval <- function(survdiff) {
