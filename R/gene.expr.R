@@ -711,13 +711,14 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
 }
 
 
-de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, pos.only=FALSE, lfc.only=FALSE, nc=1L, keep.fit=FALSE, ...) {
+de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, thres=FALSE, coef, lfc.cutoff=0, pos.only=FALSE, lfc.only=FALSE, nc=1L, keep.fit=FALSE, ...) {
   # differential expression analysis with MAST, used for e.g. single-cell RNA-seq data
   # dat: gene-by-sample expression matrix (assuming sparse) of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
   # pheno: phenotypic data as a data.table with the same order of samples
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
-  # cdr: whether to include cellular detection rate (i.e. fraction of >0 genes in each cell) as a covariate
+  # cdr: whether to include cellular detection rate (i.e. fraction of >0 genes in each cell) as a covariate; if TRUE, CDR will be computed as the fraction of >0 values in each column of `dat`
+  # thres: not sure whether and how this works yet -- whether to perform adaptive thresholding (see MAST vignette "Using MAST with RNASeq"); if TRUE, will apply the automatic thresholds; or provide custom thresholds
   # coef: character vector of model coefficients to test for and to return, e.g. each can be the name of the variable (and its level, if categorical) of interest for which the linear model coefficients to be displayed, e.g. if there's a variable named "group" with two levels "control" and "treated" with "control" being the reference level, then we may use coef="grouptreated", corresponding to the result of comparing treated to control group;
   # if more than one coef is provided (i.e. length>1 character vector), will return p values for the LR test for dropping all of the provided coefs, in this case the logFC returned probably won't be very meaningful
   # or coef can be a two-column matrix of two "contrast" vectors, with rows named by the colnames of the design matrix; the first "contrast" corresponds to the baseline (e.g. control), the second corresponds to the group of interest (e.g. treated), and will test the contrast #2-#1
@@ -762,6 +763,11 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, coef, lfc.cutoff=0, 
     cData=cbind(data.frame(wellKey=colnames(dat), row.names=colnames(dat)), cdat),
     fData=data.frame(primerid=rownames(dat), row.names=rownames(dat)),
     check_sanity=FALSE)
+
+  if (isTRUE(thres)) {
+    thres <- MAST::thresholdSCRNACountMatrix(assay(sca), nbins=20, min_per_bin=30)
+    MAST::assays(sca, withDimnames=FALSE) <- c(MAST::assays(sca), list(thresh=thres$counts_threshold))
+  }
   
   nc.bak <- options("mc.cores")$mc.cores
   if (nc>1) options(mc.cores=nc)

@@ -804,37 +804,59 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
 
 
 simple.nested.model.matrix <- function(dat, a, b) {
-  # create a proper design matrix for a simple nested design in the form of ~a/b
-  # a and b should be both categorical, a should have two (or more) levels, b should have three or more levels, nested within a
-  # control-treatment contrast will be used for a and sum contrast will be used for b
-  # a common scenario for this is a control-treatment (i.e. bi-level a) experimental design, with control and treatment groups containing multiple independent individuals (i.e. multi-level b; the individuals in the control and treatment groups are different), and there are replicated data points for each individual;
-  # then the coefficient associated with the second column of the model matrix created by this function will be the treatment effect vs control: mean(mean of each treated individual) - mean(mean of each control individual)
-  # dat: a data.frame or data.table containing the relevant covariates
-  # a, b: character, names of the variables within dat to form the ~a/b model; dat[[a]] and dat[[b]] should not contain NA
-  # this is a replacement of model.matrix for this specific use case, since the latter often cannot properly contruct the desired design matrix for nested designs
+  # create a proper design matrix for a simple nested design involving two categorical variables, the first will be referred to as A and the second B to facilitate description below
+  # A and B should have the same length w/o NA's, both will be treated as categorical, A should have two (or more) levels, B should be nested within A; it doesn't matter if the level coding of B is reused across levels of A (e.g. if within one level of A the B levels are named 1 and 2, then in another level of A the B levels can still be named 1, 2, etc., or it can be named uniquely w/o name-sharing; in both cases it will be understood that all the B levels are distinct from each other.)
+  # control-treatment contrast will be used for A and sum contrast will be used for B
+  # a common scenario for this is a control-treatment (i.e. bi-level A) experimental design, with the control and treatment arms each containing multiple independent individuals (i.e. multi-level B; the individuals in the control and treatment groups are different), and there are replicated data points for each individual;
+  # we want to create a design matrix whose first non-intercept term corresponds to the effect of treatment vs control: mean(mean of each treated individual) - mean(mean of each control individual)
+  # this will return the proper design matrix for the specific case as described above, as a replacement for the base R `model.matrix(~A/B, dat)`, since the latter in general does not give what is desired.
+  # there should be at least one level of A that contains >=2 levels of B for this function to be useful (although otherwise this function still returns the correct result, i.e. the design matrix reduces to ~A)
+  # dat: a data.frame or data.table containing the two variables A and B described above (but they can have arbitrary names in dat, and in the output both variables will be named by their orignal names)
+  # a, b: character, names of the variables within dat, dat[[a]] and dat[[b]] will be A and B respectively
+
+  args <- setNames(list(dat[[a]], dat[[b]]), c(a, b))
+  do.call(simple.nested.model.matrix0, args)
+}
+
+
+simple.nested.model.matrix0 <- function(...) {
+  # create a proper design matrix for a simple nested design involving two categorical variables
+  # need to provide exactly two named arguments, the first will be referred to as A and the second B to facilitate description below, but in the output both variables will be named by their corresponding argument names;
+  # A and B should have the same length w/o NA's, both will be treated as categorical, A should have two (or more) levels, B should be nested within A; it doesn't matter if the level coding of B is reused across levels of A (e.g. if within one level of A the B levels are named 1 and 2, then in another level of A the B levels can still be named 1, 2, etc., or it can be named uniquely w/o name-sharing; in both cases it will be understood that all the B levels are distinct from each other.)
+  # control-treatment contrast will be used for A and sum contrast will be used for B
+  # a common scenario for this is a control-treatment (i.e. bi-level A) experimental design, with the control and treatment arms each containing multiple independent individuals (i.e. multi-level B; the individuals in the control and treatment groups are different), and there are replicated data points for each individual;
+  # we want to create a design matrix whose first non-intercept term corresponds to the effect of treatment vs control: mean(mean of each treated individual) - mean(mean of each control individual)
+  # this will return the proper design matrix for the specific case as described above, as a replacement for the base R `model.matrix(~A/B, data)`, since the latter in general does not give what is desired.
+  # there should be at least one level of A that contains >=2 levels of B for this function to be useful (although otherwise this function still returns the correct result, i.e. the design matrix reduces to ~A)
   
-  dat <- as.data.table(dat)[, .(a=get(a), b=get(b))]
-  if (any(!complete.cases(dat))) stop("Please remove NA's in the provided variables.")
-  la <- levels(factor(dat$a))
-  lb <- lapply(la, function(ai) dat[a==ai, unique(b)])
+  args <- list(...)
+  if (length(args)!=2 || is.null(names(args))) stop("Please provide two named arguments.")
+  a <- factor(args[[1]])
+  b <- factor(args[[2]])
+  an <- names(args)[1]
+  bn <- names(args)[2]
+  if (length(a)!=length(b)) stop("The provided variables are not of the same length.")
+  if (anyNA(a) || anyNA(b)) stop("Please remove NA's in the provided variables.")
+  la <- levels(a)
+  lb <- lapply(la, function(ai) unique(b[a==ai]))
   names(lb) <- la
-  mat <- matrix(rep(1,nrow(dat)), ncol=1)
+  mat <- matrix(rep(1,length(a)), ncol=1)
   colnames(mat) <- "(Intercept)"
   for (ai in la[-1]) {
-    xi <- dat[, matrix(ifelse(a==ai, 1, 0), ncol=1)]
-    colnames(xi) <- paste0(a,ai)
+    xi <- matrix(ifelse(a==ai, 1, 0), ncol=1)
+    colnames(xi) <- paste0(an,ai)
     mat <- cbind(mat, xi)
   }
   for (ai in la) {
     for (bi in lb[[ai]][-1]) {
-      xi <- dat[, matrix(ifelse(a!=ai, 0, ifelse(b==bi, 1, ifelse(b==lb[[ai]][1], -1, 0))), ncol=1)]
-      colnames(xi) <- paste0(a,ai,":",b,bi)
+      xi <- matrix(ifelse(a!=ai, 0, ifelse(b==bi, 1, ifelse(b==lb[[ai]][1], -1, 0))), ncol=1)
+      colnames(xi) <- paste0(an,ai,":",bn,bi)
       mat <- cbind(mat, xi)
     }
   }
   rownames(mat) <- 1:nrow(mat)
   tmp <- list("contr.treatment", "contr.sum")
-  names(tmp) <- c(a, b)
+  names(tmp) <- c(an, bn)
   attr(mat, "contrasts") <- tmp
   mat
 }
@@ -906,6 +928,29 @@ makeContrasts <- function(..., contrasts=NULL, levels, check.names=TRUE) {
 		cm[,j] <- ej
 	}
 	cm
+}
+
+
+get.fml.terms <- function(fml) {
+  # get all terms in the rhs of a formula, returned as a character vector, e.g. apply this on ~a*b or y~a*b gives c("a","b","a:b")
+  attr(terms(fml), "term.labels")
+}
+
+get.fml.vars <- function(fml) {
+  # get all variables in the rhs of a formula, returned as a character vector, e.g. apply this on ~a*b or y~a*b gives c("a","b")
+  res <- rownames(attr(terms(fml), "factors"))
+  # if lhs is present, remove lhs
+  if (length(fml)==3) res <- res[res!=as.character(fml)[2]]
+  res
+}
+
+drop.vars <- function(fml, x) {
+  # drop any terms involving the specified variables `x` (given as a character vector) from the rhs of formula `fml`
+  # this does not work for mixed effect model formula
+  ftm <- terms(fml)
+  tmp <- attr(ftm, "factors")
+  idx <- which(colSums(tmp[x, , drop=FALSE])>0)
+  formula(drop.terms(ftm, dropx=idx, keep.response=length(fml)==3))
 }
 
 

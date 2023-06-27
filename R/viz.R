@@ -221,7 +221,7 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
     theme(axis.title.y=element_text(size=15),
       axis.title.x=element_blank(),
       axis.text.y=element_text(size=12),
-      axis.text.x=element_text(size=14),
+      axis.text.x=element_text(size=14, hjust=1, angle=35),
       legend.position="none")
 
   if (ll==2 || ll==3) {
