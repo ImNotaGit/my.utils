@@ -568,12 +568,12 @@ run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
       tmp <- drop1(fit, as.formula(paste("~",drop)), test=drop.test)
       res[, pval:=tmp[drop, names(tmp) %in% c("Pr(>F)","Pr(>Chi)")]]
     }
-    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
+    if (keep.fit) list(fit=fit, summary=res) else res
   }, error=function(e) {
     warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
     res <- data.table(coef=NA, se=NA, pval=NA)
     if (exists(coef) && is.vector(coef) && length(coef)>1) res <- cbind(x=coef, res)
-    if (keep.fit) list(fitted.model=e, summary.table=res) else res
+    if (keep.fit) list(fit=e, summary=res) else res
   })
 }
 
@@ -586,7 +586,7 @@ run.lm <- function(dat, model = y ~ x*z, design=NULL, y=NULL, ..., coef="x", dro
   # alternatively, provide design (design/model matrix) and y (vector of dependent variable values) instead of model and dat; but can also keep dat and provide y as the name of the dependent variable in dat
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lm() can also be provided here, so need to be careful to avoid any name conflicts
   # drop.test: whether to use p value from a test based on nested models (F test or likelihood ratio test) by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(lm()), i.e. based on t test
-  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   drop.test <- match.arg(drop.test)
   if (is.null(design)) {
@@ -606,7 +606,7 @@ run.lmer <- function(dat, model = y ~ x + (x|cluster), coef="x", ..., keep.fit=F
   # fit a multilevel linear model (wrapper around lmerTest::lmer)
   # dat: a data.table containing covariates; model: formula for model; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lmer() can also be provided here, so need to be careful to avoid any name conflicts
-  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   library(lmerTest) # the package was imported but not attached; attach it if this function is called
   run.f(f=lmer, data=dat, formula=model, ..., coef=coef, keep.fit=keep.fit)
@@ -621,7 +621,7 @@ run.glm <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binomial, 
   # alternatively, provide design (design/model matrix) and y (vector of dependent variable values) instead of model and dat; but can also keep dat and provide y as the name of the dependent variable in dat
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to glm() can also be provided here, so need to be careful to avoid any name conflicts
   # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(glm()), i.e. based on Wald test that may be problematic for small sample size
-  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   drop.test <- match.arg(drop.test)
   if (is.null(design)) {
@@ -638,7 +638,7 @@ run.clm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chi
   # dat: a data.table containing covariates; model: formula for regression; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to clm() can also be provided here, so need to be careful to avoid any name conflicts
   # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(clm()), i.e. based on Wald test that may be problematic for small sample size
-  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   library(ordinal) # the package was imported but not attached; attach it if this function is called
   drop.test <- match.arg(drop.test)
@@ -651,7 +651,7 @@ run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata
   # dat: a data.table containing covariates; model: formula for Cox regression; coef: for which variable/term should the Cox regression coefficient and p value be returned; the default values are intended to be an example
   # ...: additional variables to be used for fitting the Cox model, if they appear in the model formula and are not in dat; additional arguments to coxph() can also be provided here, so need to be careful to avoid any name conflicts
   # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(coxph()), i.e. based on Wald test that may be problematic for small sample size
-  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   library(survival) # the package was imported but not attached; attach it if this function is called
   drop.test <- match.arg(drop.test)
@@ -688,7 +688,7 @@ run.survdiff <- function(dat, model = Surv(surv_days, surv_status) ~ x + y + str
   # coef: name of one particular row of the survdiff table; the "observed" and "expected" values in this row will be returned;
   # the default values of model and coef are intended to be examples
   # ...: additional variables for survival::survdiff
-  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the "observed" and "expected" values and p value
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the "observed" and "expected" values and p value
 
   library(survival) # the package was imported but not attached; attach it if this function is called
 
@@ -705,10 +705,10 @@ run.survdiff <- function(dat, model = Surv(surv_days, surv_status) ~ x + y + str
     }
     p <- get.survdiff.pval(fit)
     res <- data.table(exp=Exp, obs=obs, pval=p)
-    if (keep.fit) list(fitted.model=fit, summary.table=res) else res
+    if (keep.fit) list(fit=fit, summary=res) else res
   }, error=function(e) {
     warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
-    if (keep.fit) list(fitted.model=e, summary.table=data.table(coef=NA, pval=NA)) else data.table(exp=NA, obs=NA, pval=NA)
+    if (keep.fit) list(fit=e, summary=data.table(coef=NA, pval=NA)) else data.table(exp=NA, obs=NA, pval=NA)
   })
 }
 
@@ -724,7 +724,7 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
   # the automatic selection of base follows the scCODA method, i.e. will select the category with the smallest dispersion in fractions across all samples, among the categories that have missing or zero values in less than auto.base.cutoff fraction of samples
   # coef: for which variable/term should the regression coefficient and p value be returned; is missing, return all coefficients
   # ...: additional arguments passed to DirichletReg::DirichReg
-  # keep.fit: if TRUE, will return list(fitted.model, summary.table), else simply return summary.table, which is a data.table containing the coefficient and p value for the variable/term of interest
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   if (!requireNamespace("DirichletReg", quietly=TRUE)) {
     stop("Package \"DirichletReg\" needed for this function to work.")
@@ -799,23 +799,7 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
     } else res <- res[names(res) %in% coef]
   }
   if (length(res)==1) res <- res[[1]]
-  if (keep.fit) list(fitted.model=fit, summary.table=res) else res
-}
-
-
-simple.nested.model.matrix <- function(dat, a, b) {
-  # create a proper design matrix for a simple nested design involving two categorical variables, the first will be referred to as A and the second B to facilitate description below
-  # A and B should have the same length w/o NA's, both will be treated as categorical, A should have two (or more) levels, B should be nested within A; it doesn't matter if the level coding of B is reused across levels of A (e.g. if within one level of A the B levels are named 1 and 2, then in another level of A the B levels can still be named 1, 2, etc., or it can be named uniquely w/o name-sharing; in both cases it will be understood that all the B levels are distinct from each other.)
-  # control-treatment contrast will be used for A and sum contrast will be used for B
-  # a common scenario for this is a control-treatment (i.e. bi-level A) experimental design, with the control and treatment arms each containing multiple independent individuals (i.e. multi-level B; the individuals in the control and treatment groups are different), and there are replicated data points for each individual;
-  # we want to create a design matrix whose first non-intercept term corresponds to the effect of treatment vs control: mean(mean of each treated individual) - mean(mean of each control individual)
-  # this will return the proper design matrix for the specific case as described above, as a replacement for the base R `model.matrix(~A/B, dat)`, since the latter in general does not give what is desired.
-  # there should be at least one level of A that contains >=2 levels of B for this function to be useful (although otherwise this function still returns the correct result, i.e. the design matrix reduces to ~A)
-  # dat: a data.frame or data.table containing the two variables A and B described above (but they can have arbitrary names in dat, and in the output both variables will be named by their orignal names)
-  # a, b: character, names of the variables within dat, dat[[a]] and dat[[b]] will be A and B respectively
-
-  args <- setNames(list(dat[[a]], dat[[b]]), c(a, b))
-  do.call(simple.nested.model.matrix0, args)
+  if (keep.fit) list(fit=fit, summary=res) else res
 }
 
 
@@ -859,6 +843,22 @@ simple.nested.model.matrix0 <- function(...) {
   names(tmp) <- c(an, bn)
   attr(mat, "contrasts") <- tmp
   mat
+}
+
+
+simple.nested.model.matrix <- function(dat, a, b) {
+  # create a proper design matrix for a simple nested design involving two categorical variables, the first will be referred to as A and the second B to facilitate description below
+  # A and B should have the same length w/o NA's, both will be treated as categorical, A should have two (or more) levels, B should be nested within A; it doesn't matter if the level coding of B is reused across levels of A (e.g. if within one level of A the B levels are named 1 and 2, then in another level of A the B levels can still be named 1, 2, etc., or it can be named uniquely w/o name-sharing; in both cases it will be understood that all the B levels are distinct from each other.)
+  # control-treatment contrast will be used for A and sum contrast will be used for B
+  # a common scenario for this is a control-treatment (i.e. bi-level A) experimental design, with the control and treatment arms each containing multiple independent individuals (i.e. multi-level B; the individuals in the control and treatment groups are different), and there are replicated data points for each individual;
+  # we want to create a design matrix whose first non-intercept term corresponds to the effect of treatment vs control: mean(mean of each treated individual) - mean(mean of each control individual)
+  # this will return the proper design matrix for the specific case as described above, as a replacement for the base R `model.matrix(~A/B, dat)`, since the latter in general does not give what is desired.
+  # there should be at least one level of A that contains >=2 levels of B for this function to be useful (although otherwise this function still returns the correct result, i.e. the design matrix reduces to ~A)
+  # dat: a data.frame or data.table containing the two variables A and B described above (but they can have arbitrary names in dat, and in the output both variables will be named by their orignal names)
+  # a, b: character, names of the variables within dat, dat[[a]] and dat[[b]] will be A and B respectively
+
+  args <- setNames(list(dat[[a]], dat[[b]]), c(a, b))
+  do.call(simple.nested.model.matrix0, args)
 }
 
 
