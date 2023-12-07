@@ -131,11 +131,15 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
   circ <- data.table(x=0.5*cos(seq(0,2*pi, len=500)), y=0.5*sin(seq(0,2*pi, len=500)))
   loadings <- data.table(lab=rownames(res$rotation), x=res$rotation[, pc.x], y=res$rotation[, pc.y])
   if (!is.null(ld.color)) {
-    loadings[, color:=ld.color]
+    if ("prcomp" %in% class(mat) && length(ld.color)!=nrow(loadings)) warning("length of `ld.color` does not match the number of loadings, will skip coloring of loadings; please double check `nrow(mat$rotation)`.")
+    loadings[, color:=ld.color[colnames(mat) %in% loadings$lab]]
     ld.color <- "color"
   }
   if (!is.null(ld.rev)) {
-    if (is.character(ld.rev)) ld.rev <- loadings$lab %in% ld.rev
+    if (is.logical(ld.rev)) {
+      if ("prcomp" %in% class(mat) && length(ld.rev)!=nrow(loadings)) warning("length of `ld.rev` does not match the number of loadings, will skip reversed plotting of loadings; please double check `nrow(mat$rotation)`.")
+      ld.rev <- ld.rev[colnames(mat) %in% loadings$lab]
+    } else if (is.character(ld.rev)) ld.rev <- loadings$lab %in% ld.rev
   } else ld.rev <- FALSE
   loadings[, rev:=ld.rev]
   loadings[rev==TRUE, c("x", "y"):=list(-x, -y)]
