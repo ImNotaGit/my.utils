@@ -46,7 +46,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
   # center, scale, ...: passed to prcomp()
 
   if (!is.null(do.plot) && any(!do.plot %in% c("scree", "pc", "loading", "all"))) stop('`do.plot` should be among "scree", "pc", "loading", and "all".')
-  if (do.plot=="all") do.plot <- c("scree", "pc", "loading")
+  if (length(do.plot)==1 && do.plot=="all") do.plot <- c("scree", "pc", "loading")
   if ("prcomp" %in% class(mat)) {
     res <- mat
   } else {
