@@ -29,8 +29,9 @@ subchunkify <- function(p, w, h, nm=NULL, ...) {
 }
 
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, center=TRUE, scale=TRUE, ...) {
-  # PCA plot, given a matrix mat of sample-by-variable
+plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, ld.color=NULL, ld.rev=NULL, do.plot=c("pc","loading","both","none"), center=TRUE, scale=TRUE, ...) {
+  # PCA plot, given a matrix mat (or data.frame, or data.table where the first column is sample name/ID) of sample-by-variable
+  # or mat can be the prcomp object, then center, scale and ... will be ignored
   # pc.x and pc.y: PC's to plot on the x any y axes
   # data: data.table with the same number of rows as mat for additional variables of the samples
   # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting, or column names in data if data is given
@@ -39,18 +40,27 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
   # label.outliers: whether or not to specifically label the ourliers in red text (independent of other labeling settings); for the label text, will use value in `label` if given, otherwise use rownames(mat); if rownames(mat)=NULL, will use row indices
   # ourliers.cutoff: the alpha level for determining outliers with a Chi-Squared distribution of the Mahalanobis distances
   # alpha: a single alpha value for the plotting, not used as aes() for plotting
+  # ld.color: vector corresponding to the variables (columns of mat) for plotting
+  # ld.rev: logical vector corresponding to the variables, whether to plot its loading in the reverse direction; or provide names of the variables to be reversed
+  # do.plot: what to plot
   # center, scale, ...: passed to prcomp()
 
-  if (scale) {
-    id <- apply(mat, 2, uniqueN)==1
-    s <- sum(id)
-    if (s!=0) {
-      message(sprintf("removed %d columns of zero variance.", s))
-      mat <- mat[, !id]
+  do.plot <- match.arg(do.plot)
+  if ("prcomp" %in% class(mat)) {
+    res <- mat
+  } else {
+    if (length(class(mat))==1 && class(mat)=="data.frame") mat <- data.matrix(mat) else if ("data.table" %in% class(mat)) mat <- dt2mat(mat)
+    if (scale) {
+      id <- apply(mat, 2, uniqueN)==1
+      s <- sum(id)
+      if (s!=0) {
+        message(sprintf("removed %d columns of zero variance.", s))
+        mat <- mat[, !id]
+      }
     }
+    res <- prcomp(mat, center=center, scale.=scale, ...)
   }
 
-  res <- prcomp(mat, center=center, scale.=scale, ...)
   tot.var <- sum(res$sdev^2)
   varx <- sprintf("PC %d (%.2f%%)", pc.x, res$sdev[pc.x]^2 /tot.var*100)
   vary <- sprintf("PC %d (%.2f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
@@ -74,7 +84,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
     size <- "size"
   }
   if (label.outliers && is.null(label)) {
-    if (is.null(rownames(mat))) label <- 1:nrow(mat) else label <- rownames(mat)
+    if (is.null(rownames(mat.pc))) label <- 1:nrow(mat.pc) else label <- rownames(mat.pc)
   }
   if (!(length(label)==1 && label %in% names(dat) || is.null(label))) {
     dat[, label:=label]
@@ -82,7 +92,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
   }
   if (!is.null(label.subset)) {
     if (is.logical(label.subset)) label.subset <- which(label.subset)
-    if (is.character(label.subset)) label.subset <- which(rownames(mat) %in% label.subset)
+    if (is.character(label.subset)) label.subset <- which(rownames(mat.pc) %in% label.subset)
   }
   if (label.outliers) {
     md <- mahalanobis(mat.pc, colMeans(mat.pc), cov(mat.pc))
@@ -101,9 +111,36 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
     if (label.outliers && length(id.outliers)>0) dat[id.outliers, lab.color:="red2"]
     p <- p + geom_text_repel(data=dat[lab.flag==TRUE], aes_string(label=label), color=dat[lab.flag==TRUE, lab.color], size=label.size)
   }
-  print(p)
 
-  invisible(list(pca=res, plot.data=dat, plot=p))
+  circ <- data.table(x=0.5*cos(seq(0,2*pi, len=500)), y=0.5*sin(seq(0,2*pi, len=500)))
+  loadings <- data.table(lab=rownames(res$rotation), x=res$rotation[, pc.x], y=res$rotation[, pc.y])
+  if (!is.null(ld.color)) {
+    loadings[, color:=ld.color]
+    ld.color <- "color"
+  }
+  if (!is.null(ld.rev)) {
+    if (is.character(ld.rev)) ld.rev <- loadings$lab %in% ld.rev
+  } else ld.rev <- FALSE
+  loadings[, rev:=ld.rev]
+  loadings[rev==TRUE, c("x", "y"):=list(-x, -y)]
+  pld <- ggplot()+ xlab(varx) + ylab(vary) +
+    geom_path(data=circ, aes(x=x, y=y), color="grey", linetype="dashed") +
+    geom_hline(yintercept=0, color="grey", linetype="dashed") +
+    geom_vline(xintercept=0, color="grey", linetype="dashed")
+  if (loadings[, any(!rev)]) pld <- pld + geom_segment(data=loadings[rev==FALSE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(length=unit(5,"pt"), type="closed"), lwd=0.7, alpha=0.7)
+  if (loadings[, any(rev)]) pld <- pld + geom_segment(data=loadings[rev==TRUE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(angle=150, length=unit(6,"pt")), lwd=0.7, alpha=0.7)
+  pld <- pld + geom_text_repel(data=loadings, aes(x=x, y=y, label=lab), size=2.6) +
+    coord_equal() +
+    theme_classic()
+
+  if (do.plot %in% c("pc", "both")) {
+    print(p)
+    if (do.plot=="both") print(pld)
+  } else if (do.plot=="loading") {
+    print(pld)
+  }
+
+  invisible(list(pca=res, pc.plot.data=dat, pc.plot=p, loading.plot.data=loadings, loading.plot=pld, outliers=if (label.outliers) rownames(mat.pc)[id.outliers] else NULL))
 }
 
 
