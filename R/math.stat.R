@@ -62,6 +62,24 @@ trans4m <- function(dat, method=inv.norm, by=21) {
 }
 
 
+get.dist.to.line <- function(x, a, b) {
+  # get distance of a point x and a line defined by endpoints a and b in 2D, modified from pathviewr::get_dist_point_line
+  d <- a-b
+  m <- cbind(d, x-a)
+  abs(det(m)) / sqrt(sum(d*d))
+}
+
+
+get.elbow <- function(dat) {
+  # find the "elbow point" of a 2D curve, modified from pathviewr::find_curve_elbow
+  # the elbow point is defined as the point farthest from the line defined by the endpoints
+  # dat: a matrix-like object of two columns, the first x, the second y
+  # will return the (row) index of the elbow point
+  dat <- data.matrix(dat)
+  which.max(apply(dat, 1, get.dist.to.line, a=dat[1,], b=dat[nrow(dat),]))
+}
+
+
 wilcox <- function(s1, s2, ...) {
   # run Wilcoxon test on two samples given as two vectors in s1 and s2, return a data.table with the rank-biserial correlation and p value for the test.
 

@@ -29,7 +29,7 @@ subchunkify <- function(p, w, h, nm=NULL, ...) {
 }
 
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, ld.color=NULL, ld.rev=NULL, do.plot=c("pc","loading","both","none"), center=TRUE, scale=TRUE, ...) {
+plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, ld.color=NULL, ld.rev=NULL, do.plot="pc", center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat (or data.frame, or data.table where the first column is sample name/ID) of sample-by-variable
   # or mat can be the prcomp object, then center, scale and ... will be ignored
   # pc.x and pc.y: PC's to plot on the x any y axes
@@ -42,10 +42,11 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
   # alpha: a single alpha value for the plotting, not used as aes() for plotting
   # ld.color: vector corresponding to the variables (columns of mat) for plotting
   # ld.rev: logical vector corresponding to the variables, whether to plot its loading in the reverse direction; or provide names of the variables to be reversed
-  # do.plot: what to plot
+  # do.plot: what to plot, a vector of one or more of "scree", "pc", "loading"; or "all" as a shorthand for all plots; set to NULL to disable plotting
   # center, scale, ...: passed to prcomp()
 
-  do.plot <- match.arg(do.plot)
+  if (!is.null(do.plot) && any(!do.plot %in% c("scree", "pc", "loading", "all"))) stop('`do.plot` should be among "scree", "pc", "loading", and "all".')
+  if (do.plot=="all") do.plot <- c("scree", "pc", "loading")
   if ("prcomp" %in% class(mat)) {
     res <- mat
   } else {
@@ -62,8 +63,23 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
   }
 
   tot.var <- sum(res$sdev^2)
-  varx <- sprintf("PC %d (%.2f%%)", pc.x, res$sdev[pc.x]^2 /tot.var*100)
-  vary <- sprintf("PC %d (%.2f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
+  varx <- sprintf("PC %d (%.1f%%)", pc.x, res$sdev[pc.x]^2 /tot.var*100)
+  vary <- sprintf("PC %d (%.1f%%)", pc.y, res$sdev[pc.y]^2 /tot.var*100)
+
+  var.dat <- data.table(PC=1:length(res$sdev), `Each PC`=res$sdev^2/tot.var*100)
+  elbow <- get.elbow(var.dat)
+  var.dat[, Cumulative:=cumsum(`Each PC`)]
+  var.dat <- melt(var.dat, id.vars="PC", variable.name="what", value.name="y")
+  pvar <- ggplot(var.dat, aes(x=PC, y=y, color=what)) +
+    scale_x_continuous("PC", breaks=1:length(res$sdev)) + scale_y_continuous("% Total Variance", n.breaks=10) +
+    geom_vline(xintercept=elbow, color="grey", linetype="dashed") +
+    geom_point() +
+    geom_text_repel(data=var.dat[!(PC==1 & what=="Cumulative")], aes(x=PC, y=y, label=sprintf("%.1f",y)), color="grey10", size=label.size) +
+    geom_line(aes(group=what)) +
+    scale_color_manual(values=c("grey10","darkblue")) +
+    theme_classic() +
+    theme(panel.grid.major.y=element_line(size=0.4),
+          legend.position="none")
 
   mat.pc <- cbind(x=res$x[, pc.x], y=res$x[, pc.y])
   dat <- data.table(x=res$x[, pc.x], y=res$x[, pc.y])
@@ -129,18 +145,21 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
     geom_vline(xintercept=0, color="grey", linetype="dashed")
   if (loadings[, any(!rev)]) pld <- pld + geom_segment(data=loadings[rev==FALSE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(length=unit(5,"pt"), type="closed"), lwd=0.7, alpha=0.7)
   if (loadings[, any(rev)]) pld <- pld + geom_segment(data=loadings[rev==TRUE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(angle=150, length=unit(6,"pt")), lwd=0.7, alpha=0.7)
-  pld <- pld + geom_text_repel(data=loadings, aes(x=x, y=y, label=lab), size=2.6) +
+  pld <- pld + geom_text_repel(data=loadings, aes(x=x, y=y, label=lab), size=label.size) +
     coord_equal() +
     theme_classic()
 
-  if (do.plot %in% c("pc", "both")) {
+  if ("scree" %in% do.plot) {
+    print(pvar)
+  }
+  if ("pc" %in% do.plot) {
     print(p)
-    if (do.plot=="both") print(pld)
-  } else if (do.plot=="loading") {
+  }
+  if ("loading" %in% do.plot) {
     print(pld)
   }
 
-  invisible(list(pca=res, pc.plot.data=dat, pc.plot=p, loading.plot.data=loadings, loading.plot=pld, outliers=if (label.outliers) rownames(mat.pc)[id.outliers] else NULL))
+  invisible(list(pca=res, scree.plot.data=var.dat, scree.plot=pvar, elbow=elbow, pc.plot.data=dat, pc.plot=p, loading.plot.data=loadings, loading.plot=pld, outliers=if (label.outliers) rownames(mat.pc)[id.outliers] else NULL))
 }
 
 
