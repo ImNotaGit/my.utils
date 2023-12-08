@@ -29,10 +29,11 @@ subchunkify <- function(p, w, h, nm=NULL, ...) {
 }
 
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, ld.color=NULL, ld.rev=NULL, do.plot="pc", center=TRUE, scale=TRUE, ...) {
+plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, ld.color=NULL, ld.rev=NULL, do.plot="pc", center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat (or data.frame, or data.table where the first column is sample name/ID) of sample-by-variable
   # or mat can be the prcomp object, then center, scale and ... will be ignored
   # pc.x and pc.y: PC's to plot on the x any y axes
+  # max.pc: max number of PCs to plot on the scree plot
   # data: data.table with the same number of rows as mat for additional variables of the samples
   # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting, or column names in data if data is given
   # label.size: size of label text
@@ -68,6 +69,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, data=NULL, color=NULL, shape=NULL, siz
 
   var.dat <- data.table(PC=1:length(res$sdev), `Each PC`=res$sdev^2/tot.var*100)
   elbow <- get.elbow(var.dat)
+  var.dat <- var.dat[1:min(max.pc, .N)]
   var.dat[, Cumulative:=cumsum(`Each PC`)]
   var.dat <- melt(var.dat, id.vars="PC", variable.name="what", value.name="y")
   pvar <- ggplot(var.dat, aes(x=PC, y=y, color=what)) +
