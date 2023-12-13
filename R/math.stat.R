@@ -568,7 +568,8 @@ run.cor <- function(dat, model, ...) {
 
 run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
   # helper function for constructing the various run* functions
-  # coef: if missing or NULL, will return results for all coefficients in the model
+  # coef: if more than one, will return each of them; if missing or NULL, will return results for all coefficients in the model
+  # drop: if more than one, will drop each one separately and return results for each
 
   tmp <- list(...)
   args <- tmp[names(tmp) %in% names(formals(f))]
@@ -583,8 +584,14 @@ run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
     if (length(coef)>1) res <- cbind(x=coef, res)
     # "anova-like" test if required
     if (drop.test!="none") {
-      tmp <- drop1(fit, as.formula(paste("~",drop)), test=drop.test)
-      res[, pval:=tmp[drop, names(tmp) %in% c("Pr(>F)","Pr(>Chi)")]]
+      for (d in drop) {
+        tmp <- drop1(fit, as.formula(paste("~",d)), test=drop.test)
+        if (d %in% coef) {
+          res[coef==d, pval:=tmp[d, names(tmp) %in% c("Pr(>F)","Pr(>Chi)")]]
+        } else {
+          res <- rbind(res, data.table(coef=d, pval=tmp[d, names(tmp) %in% c("Pr(>F)","Pr(>Chi)")]), fill=TRUE)
+        }
+      }
     }
     if (keep.fit) list(fit=fit, summary=res) else res
   }, error=function(e) {
@@ -648,6 +655,66 @@ run.glm <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binomial, 
     if (is.character(y)) y <- dat[[y]]
     run.f(f=glm.fit, x=design, y=y, family=family, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
   }
+}
+
+
+run.multinom <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binomial, ..., coef="x", drop.test=c("none","Chisq"), drop=coef, keep.fit=FALSE) {
+  # fit a multinomial regression model (wrapper around nnet::multinom)
+  # dat: a data.table containing covariates; model: formula for regression;
+  # coef: for which variable/term should the regression coefficient and p value be returned;
+  # the default values of model and coef are intended to be an example
+  # alternatively, provide design (design/model matrix) and y (vector of dependent variable values) instead of model and dat; but can also keep dat and provide y as the name of the dependent variable in dat
+  # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to nnet::multinom() can also be provided here, so need to be careful to avoid any name conflicts
+  # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be from Wald test, and may be problematic for small sample size
+  # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
+
+  # these packages were imported but not attached; attach it if this function is called
+  library(nnet)
+  library(lmtest)
+  drop.test <- match.arg(drop.test)
+  tryCatch({
+    if (is.null(design)) {
+      fit <- multinom(formula=model, data=dat)
+    } else {
+      if (is.character(y) && length(y)==1) {
+        design <- cbind(dat[[y]], design)
+        colnames(design)[1] <- y
+      } else {
+        design <- cbind(y=y, design)
+        y <- "y"
+      }
+      fit <- multinom(formula=as.formula(sprintf("%s~.", y)), data=design)
+    }
+    coefs <- coef(fit)
+    se <- summary(fit)$standard.errors
+    z <- coefs/se
+    p <- (1 - pnorm(abs(z), 0, 1)) * 2
+    if (missing(coef) || is.null(coef)) coef <- colnames(coefs)
+    if (is.numeric(coef)) coef <- colnames(coefs)[coef]
+    if (any(!coef %in% colnames(coefs))) stop("Some `coef` not in model.")
+    ys <- rownames(coefs)
+    names(ys) <- ys
+    idx <- colnames(coefs) %in% coef
+    res <- rbindlist(lapply(ys, function(y) data.table(x=colnames(coefs), coef=coefs[y,], se=se[y,], pval=p[y,])[idx]), idcol="y")
+    if (length(coef)==1) res[, x:=NULL]
+    # "anova-like" test if required
+    if (drop.test=="Chisq") {
+      for (d in drop) {
+        tmp <- lrtest(fit, d)$`Pr(>Chisq)`
+        if (d %in% coef) {
+          res[coef==d, pval:=tmp[!is.na(tmp)]]
+        } else {
+          res <- rbind(res, data.table(coef=d, pval=tmp[!is.na(tmp)]), fill=TRUE)
+        }
+      }
+    }
+    if (keep.fit) list(fit=fit, summary=res) else res
+  }, error=function(e) {
+    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
+    res <- data.table(y=NA, x=NA, coef=NA, se=NA, pval=NA)
+    if (exists(coef) && is.vector(coef) && length(coef)==1) res[, coef:=coef]
+    if (keep.fit) list(fit=e, summary=res) else res
+  })
 }
 
 

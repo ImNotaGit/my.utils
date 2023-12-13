@@ -12,6 +12,7 @@ LazyData: true
 Depends:
     data.table,
     stringr,
+    matrixStats,
     parallel,
     doParallel,
     foreach,
@@ -29,6 +30,8 @@ Imports:
     pROC,
     PRROC,
     rms,
+    nnet,
+    lmtest,
     lmerTest,
     ordinal
 Suggests:
@@ -47,3 +50,7 @@ Suggests:
     clustermq,
     rmote,
     httpgd
+Remotes:
+    ImNotaGit/nnet,
+    hafen/rmote
+
