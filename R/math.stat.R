@@ -627,6 +627,16 @@ run.lm <- function(dat, model = y ~ x*z, design=NULL, y=NULL, ..., coef="x", dro
 }
 
 
+get.lm.pval <- function(fit) {
+  # extract overall P value from an `lm` model fit
+  # this function was taken from https://www.statology.org/r-extract-p-value-from-lm/
+  f <- summary(fit)$fstatistic
+  p <- pf(f[1], f[2], f[3], lower.tail=FALSE)
+  attributes(p) <- NULL
+  return(p)
+}
+
+
 run.lmer <- function(dat, model = y ~ x + (x|cluster), coef="x", ..., keep.fit=FALSE) {
   # fit a multilevel linear model (wrapper around lmerTest::lmer)
   # dat: a data.table containing covariates; model: formula for model; coef: for which variable/term should the regression coefficient and p value be returned; the default values are intended to be an example
