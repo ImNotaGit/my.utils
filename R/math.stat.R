@@ -685,13 +685,16 @@ run.multinom <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binom
   tryCatch({
     if (is.null(design)) {
       fit <- multinom(formula=model, data=dat)
+      ylvls <- levels(factor(dat[[as.character(model)[2]]]))
     } else {
       if (is.character(y) && length(y)==1) {
         design <- cbind(dat[[y]], design)
         colnames(design)[1] <- y
+        ylvls <- levels(factor(dat[[y]]))
       } else {
         design <- cbind(y=y, design)
         y <- "y"
+        ylvls <- levels(factor(y))
       }
       fit <- multinom(formula=as.formula(sprintf("%s~.", y)), data=design)
     }
@@ -699,6 +702,12 @@ run.multinom <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binom
     se <- summary(fit)$standard.errors
     z <- coefs/se
     p <- (1 - pnorm(abs(z), 0, 1)) * 2
+    if (!is.matrix(coefs)) {
+      coefs <- t(coefs)
+      se <- t(se)
+      p <- t(p)
+      rownames(coefs) <- rownames(se) <- rownames(p) <- ylvls[2]
+    }
     if (missing(coef) || is.null(coef)) coef <- colnames(coefs)
     if (is.numeric(coef)) coef <- colnames(coefs)[coef]
     if (any(!coef %in% colnames(coefs))) stop("Some `coef` not in model.")
