@@ -80,6 +80,70 @@ get.elbow <- function(dat) {
 }
 
 
+get.root.2norm <- function(mu1, sd1, p1, mu2, sd2, p2, mid=FALSE) {
+  # find the x coordinates of the intersecting points of two scaled normal curves
+  # this is taken from https://stackoverflow.com/questions/16982146/point-of-intersection-2-normal-curves
+  # p1, p2: scaling factors of the two curves; in a GMM p1+p2=1
+  # mid: if FALSE, return all roots; if TRUE, return the root closest to the middle point of mu1 and mu2
+  B <- (mu1/sd1^2 - mu2/sd2^2)
+  A <- 0.5*(1/sd2^2 - 1/sd1^2)
+  C <- 0.5*(mu2^2/sd2^2 - mu1^2/sd1^2) - log((sd1/sd2)*(p2/p1))
+  if (A!=0) x <- (-B + c(1,-1)*sqrt(B^2 - 4*A*C))/(2*A) else x <- -C/B
+  if (mid) x <- x[which.min(abs(x-(mu1+mu2)/2))]
+  x
+}
+
+
+gmm <- function(X, G=1:9, xlab="Value", bins=50, do.plot=TRUE, ...) {
+  # fit and plot Gaussian mixture models; currently plotting is only supported for univariate cases
+  # G: numbers of components to fit (with mclust::Mclust), the best fit will be returned
+  # xlab, bins: used for plotting
+  # do.plot: whether to print the plot
+  # ...: passed to mclust::Mclust
+
+  capture.output(fit <- mclust::Mclust(X, G=G, ...), type="output")
+  k <- fit$G
+  mu <- fit$parameters$mean
+  o <- order(mu)
+  mu <- mu[o]
+  lambda <- fit$parameters$pro[o]
+  sigma <- sqrt(fit$parameters$variance$sigmasq)
+  if (fit$modelName=="V") sigma <- sigma[o] else sigma <- rep(sigma, k)
+
+  # cut points between components (only for univariate cases)
+  if (k>1 && is.vector(X)) {
+    x.cut <- sapply(1:(k-1), function(i) get.root.2norm(mu[i], sigma[i], lambda[i], mu[i+1], sigma[i+1], lambda[i+1], mid=TRUE))
+  } else x.cut <- NULL
+
+  res <- as.data.table(t(c(k, lambda, mu, sigma, x.cut)))
+  setnames(res, c("k", paste0("lambda",1:k), paste0("mu",1:k), paste0("sigma",1:k), if (!is.null(x.cut)) paste0("x.cut",1:(k-1)) else NULL))
+
+  # plot (only for univariate cases)
+  if (is.vector(X)) {
+    dat1 <- data.table(x=X)
+    p <- ggplot(data=dat1, aes(x=x)) + xlab(xlab) +
+      geom_histogram(aes(y=..density..), fill="grey", alpha=0.6, position="identity", bins=bins) +
+      theme_classic()
+    dnorm1 <- function(lambda, ...) lambda*dnorm(...)
+    clrs <- brewer.pal(name="Set1", n=k)
+    for (i in 1:k) {
+      p <- p + geom_function(fun=dnorm1, args=list(lambda=lambda[i], mean=mu[i], sd=sigma[i]), size=0.6, color=clrs[i])
+    }
+    if (k>1) {
+      dgmm <- function(...) {
+        txt <- paste(sprintf("%s*dnorm(..., mean=%s, sd=%s)", lambda, mu, sigma), collapse=" + ")
+        eval(parse(text=txt))
+      }
+      p <- p + geom_function(fun=dgmm, size=0.6) +
+        geom_vline(xintercept=x.cut, size=0.6, linetype="dashed")
+    }
+    if (do.plot) print(p)
+  } else p <- NULL
+
+  invisible(list(fit=fit, summary=res, plot=p))
+}
+
+
 wilcox <- function(s1, s2, ...) {
   # run Wilcoxon test on two samples given as two vectors in s1 and s2, return a data.table with the rank-biserial correlation and p value for the test.
 

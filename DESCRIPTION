@@ -23,7 +23,8 @@ Depends:
     ggrepel,
     ggpubr,
     cowplot,
-    latex2exp
+    latex2exp,
+    RColorBrewer
 Imports:
     Matrix,
     survival,
@@ -33,7 +34,8 @@ Imports:
     nnet,
     lmtest,
     lmerTest,
-    ordinal
+    ordinal,
+    mclust
 Suggests:
     GenomicFeatures,
     GenomicRanges,
