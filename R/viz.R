@@ -1,10 +1,16 @@
 ## ----functions for quick data exploration and visualization----
 
 
-my.cols <- function(x) {
+my.cols <- function(x, no.grey=FALSE) {
   # my custom list of easily distinguishable colors for categorical variables with potentially many levels
   # note: order not optimized yet
-  cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#D9D9D9", "#00FF7F", "#FF1493", "#FFD700", "#7F7F7F", "#66CD00", "#FF7F00", "#FF7D7D", "#ADFF2F", "#AB82FF", "#D2B48C", "#CD853F", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#FFE4C4", "#FF4500", "#CD96CD")
+  if (no.grey) {
+    # this is to avoid confusion with NA, which is by default colored grey
+    cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#66CD00", "#FF7D7D", "#AB82FF", "#D2B48C", "#ADFF2F", "#CD853F", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#FF4500", "#CD96CD")
+  } else {
+    cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#DADADA", "#66CD00", "#FF7D7D", "#D2B48C", "#AB82FF", "#667788", "#ADFF2F", "#CD853F", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#FF4500", "#CD96CD")
+  }
+
   if (missing(x)) return(cols)
   if (length(x)==1 && is.numeric(x) && is.wholenumber(x)) {
     if (x>length(cols)) stop(sprintf("%d colors are available while you asked for %d", length(cols), x))
