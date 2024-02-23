@@ -90,6 +90,7 @@ get.root.2norm <- function(mu1, sd1, p1, mu2, sd2, p2, mid=FALSE) {
   C <- 0.5*(mu2^2/sd2^2 - mu1^2/sd1^2) - log((sd1/sd2)*(p2/p1))
   if (A!=0) x <- (-B + c(1,-1)*sqrt(B^2 - 4*A*C))/(2*A) else x <- -C/B
   if (mid) x <- x[which.min(abs(x-(mu1+mu2)/2))]
+  if (length(x)==0 || is.nan(x[1])) x <- NA
   x
 }
 
