@@ -36,7 +36,7 @@ my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE)
     if (any(duplicated(x))) x <- names(sort(table(x), decreasing=TRUE))
     if (!na.rm && is.null(na.color) && any.na) x <- c(x, NA)
     res <- cn1(get.n.cols(length(x)), x)
-    if (!is.null(na.color)) res <- c(res, cn1(na.color, NA))
+    if (!is.null(na.color) && any.na) res <- c(res, cn1(na.color, NA))
   }
   res
 }
