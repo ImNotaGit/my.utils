@@ -1,9 +1,17 @@
 ## ----functions for quick data exploration and visualization----
 
 
-my.cols <- function(x, no.grey=FALSE) {
+my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE) {
   # my custom list of easily distinguishable colors for categorical variables with potentially many levels
   # note: order not optimized yet
+  # x: if missing, will return all available colors; or a single number n, return n colors from top of the list;
+  #    or a vector, if the vector contains no duplicates, return as many colors from top of the list and named by the vector elements in order;
+  #    if the vector contains duplicates, will give colors for sort(table(x), dec=T)
+  # dup.last: if not enough colors, whether to duplicate the last color or throw an error
+  # na.rm: if x is a vector, whether to exclude NA (if any); when including NA, it will be placed last
+  # na.color: if NULL and na.rm=FALSE, will use a color in the list for NA; if not NULL, then specify the color for NA (and will automatically assume na.rm=FALSE)
+  # no.grey: exclude grey-ish colors from the list to choose from
+
   if (no.grey) {
     # this is to avoid confusion with NA, which is by default colored grey
     cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#66CD00", "#FF7D7D", "#AB82FF", "#D2B48C", "#ADFF2F", "#CD853F", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#FF4500", "#CD96CD")
@@ -12,13 +20,25 @@ my.cols <- function(x, no.grey=FALSE) {
   }
 
   if (missing(x)) return(cols)
-  if (length(x)==1 && is.numeric(x) && is.wholenumber(x)) {
-    if (x>length(cols)) stop(sprintf("%d colors are available while you asked for %d", length(cols), x))
-    return(cols[1:x])
-  } else {
-    if (length(x)>length(cols)) stop(sprintf("%d colors are available while you asked for %d.", length(cols), length(x)))
-    return(cn1(cols[1:length(x)], x))
+
+  get.n.cols <- function(n) {
+    if (n>length(cols)) {
+      if (dup.last) {
+        res <- c(cols, rep(cols[length(cols)], n-length(cols)))
+      } else stop(sprintf("%d colors are available while you asked for %d", length(cols), n))
+    } else res <- cols[1:n]
+    res
   }
+  if (length(x)==1 && is.numeric(x) && is.wholenumber(x)) {
+    res <- get.n.cols(x)
+  } else {
+    any.na <- anyNA(x)
+    if (any(duplicated(x))) x <- names(sort(table(x), decreasing=TRUE))
+    if (!na.rm && is.null(na.color) && any.na) x <- c(x, NA)
+    res <- cn1(get.n.cols(length(x)), x)
+    if (!is.null(na.color)) res <- c(res, cn1(na.color, NA))
+  }
+  res
 }
 
 
