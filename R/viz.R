@@ -55,18 +55,136 @@ subchunkify <- function(p, w, h, nm=NULL, ...) {
 }
 
 
-plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.size=3, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, alpha=0.8, ld.color=NULL, ld.rev=NULL, do.plot="pc", center=TRUE, scale=TRUE, ...) {
+plot.xy <- function(x, y, xlab=NULL, ylab=NULL, dat=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.subset=NULL, label.outliers=FALSE, outliers.cutoff=0.01, label.size=3, alpha=0.8, density="auto", diag=FALSE, trend="lm", cor.method=c("pearson","spearman","kendall"), cor.posi="auto", cor.size=4, do.plot=TRUE) {
+  # 2-D scatter plot
+  # x, y: numeric vectors of the same size, or column names in dat if dat is not NULL and provided as a data.frame or data.table or matrix
+  # color, shape, size: vectors in the same order as x/y/rows of dat for plotting (can be a named list to customize legend title), or column names in dat if dat is not NULL
+  # label: will label the points if this is anything but NULL; this can be a vector of labels in the same order as x/y/rows of dat, or column names in dat if dat is not NULL, or simply TRUE (in which case will use row names of dat, or row indices if there are no row names)
+  # label.subset: specify the subset to add labels; a logical or numeric index vector in the same order as label/rows of dat, or a character vector of a subset of labels; will label all points if NULL
+  # label.outliers: if TRUE, will label ourliers in red, independent from other label settings (even if label is NULL); to label only the outliers (and no other points), need to set label.subset to NA
+  # ourliers.cutoff: the alpha level for determining outliers with a Chi-Squared distribution of the Mahalanobis distances
+  # cor.posi, cor.size: for the text label on correlation
+  # do.plot: whether to do plotting, if FALSE, will only return the ggplot object
+
+  if (is.null(dat)) {
+    if (is.null(xlab)) xlab <- deparse(substitute(x))
+    if (is.null(ylab)) ylab <- deparse(substitute(y))
+    dat <- data.table(x=x, y=y)
+    x <- "x"
+    y <- "y"
+    ids <- 1:nrow(dat)
+  } else {
+    if (is.null(xlab)) xlab <- x
+    if (is.null(ylab)) ylab <- y
+    ids <- rownames(dat) # works for all types
+    if (is.null(ids)) ids <- 1:nrow(dat)
+    dat <- copy(as.data.table(dat))
+  }
+  if (!(length(color)==1 && color %in% names(dat) || is.null(color))) {
+    dat[, color:=unlist(color)]
+    if (!is.null(names(color))) {
+      setnames(dat, "color", names(color))
+      color <- names(color)
+    } else color <- "color"
+  }
+  if (!(length(shape)==1 && shape %in% names(dat) || is.null(shape))) {
+    dat[, shape:=unlist(shape)]
+    if (!is.null(names(shape))) {
+      setnames(dat, "shape", names(shape))
+      shape <- names(shape)
+    } else shape <- "shape"
+  }
+  if (!(length(size)==1 && size %in% names(dat) || is.null(size))) {
+    dat[, size:=unlist(size)]
+    if (!is.null(names(size))) {
+      setnames(dat, "size", names(size))
+      size <- names(size)
+    } else size <- "size"
+  }
+
+  if (isTRUE(label)) label <- ids
+  if (label.outliers && is.null(label)) {
+    label <- ids
+    if (is.null(label.subset)) label.subset <- NA
+  }
+  if (!(length(label)==1 && label %in% names(dat) || is.null(label))) {
+    dat[, label:=label]
+    label <- "label"
+  }
+  if (!is.null(label.subset)) {
+    if (length(label.subset)==1 && label.subset %in% names(dat)) {
+      label.subset <- which(dat[[label.subset]])
+    } else if (is.character(label.subset)) {
+      label.subset <- which(ids %in% label.subset)
+    } else if (is.logical(label.subset)) {
+      label.subset <- which(label.subset)
+    }
+  }
+  if (label.outliers) {
+    tmp <- data.matrix(dat[, c(x, y), with=FALSE])
+    md <- mahalanobis(tmp, colMeans(tmp), cov(tmp))
+    cutoff <- qchisq(p=1-outliers.cutoff, df=ncol(tmp))
+    id.outliers <- which(md>cutoff)
+    if (!is.null(label.subset)) label.subset <- union(label.subset, id.outliers)
+  }
+
+  p <- ggplot(dat, aes_string(x=x, y=y)) +
+    xlab(xlab) + ylab(ylab) +
+    geom_point(aes_string(color=color, shape=shape, size=size), alpha=alpha) +
+    theme_classic()
+
+  if (density=="auto") {
+    dmat <- table(cut(dat[[x]], breaks=5), cut(dat[[y]], breaks=5))
+    density <- sum(dmat>500)>5
+  }
+  if (density==TRUE) p <- p + stat_density_2d(aes(color=..level..), geom="polygon", alpha=0) + theme(legend.position="none")
+
+  if ("loess" %in% trend) {
+    set.seed(1)
+    p <- p + geom_smooth(method=loess, color="red2", size=0.8, fill="red2", alpha=0.2)
+  }
+  if (diag) p <- p + geom_abline(slope=1, intercept=0, color="grey")
+  if ("lm" %in% trend) {
+    p <- p + geom_smooth(method=lm, color="blue", size=0.8, fill="blue", alpha=0.2)
+    cor.method <- match.arg(cor.method)
+    ct <- cor.test(dat[[x]], dat[[y]], method=cor.method)
+    symb <- switch(cor.method, pearson="r", spearman="rho", kendall="tau")
+    pval <- ct$p.value
+    r <- ct$estimate
+    if (pval>=2.2e-16) lab <- sprintf("%s=%.3f\nP=%.3g", symb, r, pval) else lab <- sprintf("%s=%.3f\nP<2.2e-16", symb, r)
+    if (length(cor.posi)==1 && cor.posi=="auto") {
+      if (!exists("dmat")) dmat <- table(cut(dat[[x]], breaks=5), cut(dat[[y]], breaks=5))
+      tmp <- which(dmat==min(dmat))
+      if (r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
+      else tmp1 <- match(c(25,20,24,15,19,23,1,2,6,3,7,11,10,14,18,22,4,8,12,16,5,9,13,17,21), tmp)
+      tmp <- tmp[tmp1[!is.na(tmp1)][1]]
+      i <- tmp %% 5
+      if (i==0) i <- 5
+      j <- (tmp-1) %/% 5 + 1
+      cor.posi <- c((1.1-0.2*i)*min(dat[[x]],na.rm=TRUE)+(0.2*i-0.1)*max(dat[[x]],na.rm=TRUE), (1.1-0.2*j)*min(dat[[y]],na.rm=TRUE)+(0.2*j-0.1)*max(dat[[y]],na.rm=TRUE))
+    }
+    p <- p + annotate("text", x=cor.posi[1], y=cor.posi[2], label=lab, size=cor.size)
+  }
+
+  if (!is.null(label)) {
+    if (is.null(label.subset)) dat[, lab.flag:=TRUE] else dat[label.subset, lab.flag:=TRUE]
+    dat[, lab.color:="black"]
+    if (label.outliers && length(id.outliers)>0) dat[id.outliers, c("outlier", "lab.color"):=list(TRUE, "red2")]
+    p <- p + geom_text_repel(data=dat[lab.flag==TRUE], aes_string(label=label), color=dat[lab.flag==TRUE, lab.color], size=label.size)
+  }
+
+  if (do.plot) print(p)
+  invisible(list(p=p, plot.data=dat))
+}
+
+
+plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.subset=NULL, label.outliers=TRUE, outliers.cutoff=0.01, label.size=3, alpha=0.8, ld.color=NULL, ld.rev=NULL, do.plot="pc", center=TRUE, scale=TRUE, ...) {
   # PCA plot, given a matrix mat (or data.frame, or data.table where the first column is sample name/ID) of sample-by-variable
   # or mat can be the prcomp object, then center, scale and ... will be ignored
   # pc.x and pc.y: PC's to plot on the x any y axes
   # max.pc: max number of PCs to plot on the scree plot
   # data: data.table with the same number of rows as mat for additional variables of the samples
-  # color, shape, size, label: vectors corresponding to the samples (rows of mat) for plotting, or column names in data if data is given
-  # label.size: size of label text
-  # label.subset: a logical or index vector corresponding to label, or a character vector of a subset of labels; the subset of samples to add label
-  # label.outliers: whether or not to specifically label the ourliers in red text (independent of other labeling settings); for the label text, will use value in `label` if given, otherwise use rownames(mat); if rownames(mat)=NULL, will use row indices
-  # ourliers.cutoff: the alpha level for determining outliers with a Chi-Squared distribution of the Mahalanobis distances
-  # alpha: a single alpha value for the plotting, not used as aes() for plotting
+  # color, shape, size, label*, outlier*, alpha: for PC plot with plot.xy
   # ld.color: vector corresponding to the variables (columns of mat) for plotting
   # ld.rev: logical vector corresponding to the variables, whether to plot its loading in the reverse direction; or provide names of the variables to be reversed
   # do.plot: what to plot, a vector of one or more of "scree", "pc", "loading"; or "all" as a shorthand for all plots; set to NULL to disable plotting
@@ -86,6 +204,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
         mat <- mat[, !id]
       }
     }
+    ids <- rownames(mat)
     res <- prcomp(mat, center=center, scale.=scale, ...)
   }
 
@@ -109,52 +228,12 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
     theme(panel.grid.major.y=element_line(size=0.4),
           legend.position="none")
 
-  mat.pc <- cbind(x=res$x[, pc.x], y=res$x[, pc.y])
-  dat <- data.table(x=res$x[, pc.x], y=res$x[, pc.y])
+  dat <- cbind(x=res$x[, pc.x], y=res$x[, pc.y])
   if (!is.null(data)) {
     if (nrow(data)!=nrow(dat)) stop("mat and data have different numbers of rows!")
-    dat <- cbind(dat, data)
+    dat <- cbind(dat, as.data.frame(data))
   }
-  if (!(length(color)==1 && color %in% names(dat) || is.null(color))) {
-    dat[, color:=color]
-    color <- "color"
-  }
-  if (!(length(shape)==1 && shape %in% names(dat) || is.null(shape))) {
-    dat[, shape:=shape]
-    shape <- "shape"
-  }
-  if (!(length(size)==1 && size %in% names(dat) || is.null(size))) {
-    dat[, size:=size]
-    size <- "size"
-  }
-  if (label.outliers && is.null(label)) {
-    if (is.null(rownames(mat.pc))) label <- 1:nrow(mat.pc) else label <- rownames(mat.pc)
-  }
-  if (!(length(label)==1 && label %in% names(dat) || is.null(label))) {
-    dat[, label:=label]
-    label <- "label"
-  }
-  if (!is.null(label.subset)) {
-    if (is.logical(label.subset)) label.subset <- which(label.subset)
-    if (is.character(label.subset)) label.subset <- which(rownames(mat.pc) %in% label.subset)
-  }
-  if (label.outliers) {
-    md <- mahalanobis(mat.pc, colMeans(mat.pc), cov(mat.pc))
-    cutoff <- qchisq(p=1-outliers.cutoff, df=ncol(mat.pc))
-    id.outliers <- which(md>cutoff)
-    if (!is.null(label.subset)) label.subset <- union(label.subset, id.outliers)
-  }
-
-  p <- ggplot(dat, aes(x=x, y=y)) +
-    xlab(varx) + ylab(vary) +
-    geom_point(aes_string(color=color, shape=shape, size=size), alpha=alpha) +
-    theme_classic()
-  if (!is.null(label)) {
-    if (is.null(label.subset)) dat[, lab.flag:=TRUE] else dat[label.subset, lab.flag:=TRUE]
-    dat[, lab.color:="black"]
-    if (label.outliers && length(id.outliers)>0) dat[id.outliers, lab.color:="red2"]
-    p <- p + geom_text_repel(data=dat[lab.flag==TRUE], aes_string(label=label), color=dat[lab.flag==TRUE, lab.color], size=label.size)
-  }
+  p <- plot.xy(x="x", y="y", xlab=varx, ylab=vary, dat=dat, color=color, shape=shape, size=size, label=label, label.subset=label.subset, label.outliers=label.outliers, outliers.cutoff=outliers.cutoff, label.size=label.size, alpha=alpha, density=FALSE, diag=FALSE, trend=NULL, do.plot=FALSE)
 
   circ <- data.table(x=0.5*cos(seq(0,2*pi, len=500)), y=0.5*sin(seq(0,2*pi, len=500)))
   loadings <- data.table(lab=rownames(res$rotation), x=res$rotation[, pc.x], y=res$rotation[, pc.y])
@@ -185,13 +264,13 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
     print(pvar)
   }
   if ("pc" %in% do.plot) {
-    print(p)
+    print(p$p)
   }
   if ("loading" %in% do.plot) {
     print(pld)
   }
 
-  invisible(list(pca=res, scree.plot.data=var.dat, scree.plot=pvar, elbow=elbow, pc.plot.data=dat, pc.plot=p, loading.plot.data=loadings, loading.plot=pld, outliers=if (label.outliers) rownames(mat.pc)[id.outliers] else NULL))
+  invisible(list(pca=res, scree.plot.data=var.dat, scree.plot=pvar, elbow=elbow, pc.plot.data=p$plot.data, pc.plot=p$p, loading.plot.data=loadings, loading.plot=pld, outliers=if ("outlier" %in% names(p$plot.data)) p$plot.data[outlier==TRUE, label] else NULL))
 }
 
 
@@ -424,50 +503,6 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, geoms
     x <- lapply(ii, function(i) {lapply(jj, function(j) dat[[yvar]][dat[[xvar]]==i & dat[[facet]]==j])})
     mcp.groups(x, ylab=ylab, more.args=more.args)
   }
-}
-
-
-plot.xy <- function(x, y, xlab=deparse(substitute(x)), ylab=deparse(substitute(y)), trend="lm", cor.method=c("pearson","spearman","kendall"), density="auto", lab.posi="auto", lab.size=4) {
-
-  q <- qplot(x=x, y=y, xlab=xlab, ylab=ylab) +
-    theme_classic() +
-    theme(axis.title.y=element_text(size=14),
-      axis.title.x=element_text(size=14),
-      axis.text.y=element_text(size=12),
-      axis.text.x=element_text(size=12))
-
-  if (density=="auto") {
-    mat <- table(cut(x,breaks=5), cut(y,breaks=5))
-    density <- sum(mat>500)>5
-  }
-  if (density==TRUE) q <- q + stat_density_2d(aes(color=..level..), geom="polygon", alpha=0) + theme(legend.position="none")
-
-  if ("lm" %in% trend) {
-    q <- q + geom_smooth(method=lm, color="blue", size=0.8, fill="blue", alpha=0.2)
-    cor.method <- match.arg(cor.method)
-    ct <- cor.test(x, y, method=cor.method)
-    symb <- switch(cor.method, pearson="r", spearman="rho", kendall="tau")
-    p <- ct$p.value
-    r <- ct$estimate
-    if (p>=2.2e-16) lab <- sprintf("P=%.3g\n%s=%.3f", p, symb, r) else lab <- sprintf("P<2.2e-16\n%s=%.3f", symb, r)
-    if (length(lab.posi)==1 && lab.posi=="auto") {
-      if (!exists("mat")) mat <- table(cut(x,breaks=5), cut(y,breaks=5))
-      tmp <- which(mat==min(mat))
-      if (r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
-      else tmp1 <- match(c(25,20,24,15,19,23,1,2,6,3,7,11,10,14,18,22,4,8,12,16,5,9,13,17,21), tmp)
-      tmp <- tmp[tmp1[!is.na(tmp1)][1]]
-      i <- tmp %% 5
-      if (i==0) i <- 5
-      j <- (tmp-1) %/% 5 + 1
-      lab.posi <- c((1.1-0.2*i)*min(x,na.rm=TRUE)+(0.2*i-0.1)*max(x,na.rm=TRUE), (1.1-0.2*j)*min(y,na.rm=TRUE)+(0.2*j-0.1)*max(y,na.rm=TRUE))
-    }
-    q <- q + annotate("text", x=lab.posi[1], y=lab.posi[2], label=lab, size=lab.size)
-  }
-  if ("loess" %in% trend) {
-    set.seed(1)
-    q <- q + geom_smooth(method=loess, color="red", size=0.8, fill="red", alpha=0.2)
-  }
-  return(q)
 }
 
 
