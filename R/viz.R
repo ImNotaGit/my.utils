@@ -265,7 +265,8 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
   # if there are only 2 or 3 groups, do wilcoxon test for each pair of groups
   ll <- length(l)
   if (ll==2) {
-    tmp <- do.call(wilcox, c(list(value~group, dat), more.args))
+    #tmp <- do.call(wilcox, c(list(value~group, dat), more.args))
+    tmp <- do.call(wilcox, c(list(s1=l[[1]], s2=l[[2]]), more.args))
     stat <- dat[, .(id=12, x1=1, x2=2, x=1.5, y=addm(value,0.1), p=tmp$pval, r=tmp$r.wilcox)]
   } else if (ll==3) {
     tmp <- do.call(wilcox3, c(list(value~group, dat), more.args))
