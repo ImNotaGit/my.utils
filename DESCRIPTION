@@ -35,7 +35,8 @@ Imports:
     lmtest,
     lmerTest,
     ordinal,
-    mclust
+    mclust,
+    lubridate
 Suggests:
     GenomicFeatures,
     GenomicRanges,

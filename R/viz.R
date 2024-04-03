@@ -49,13 +49,16 @@ subchunkify <- function(p, w, h, nm=NULL, ...) {
   p.deparsed <- paste0(deparse(function() {p}), collapse="")
   more.args <- deparse(c(...))
   if (more.args=="NULL") more.args <- "" else more.args <- stringr::str_sub(more.args, 3, -2)
-  if (is.null(nm)) nm <- sprintf("subchunk_%d", floor(runif(1)*1e6)) else nm <- paste0("subchunk_", nm)
+  if (is.null(nm)) {
+    set.seed(NULL)
+    nm <- sprintf("subchunk_%s", floor(runif(1)*1e10))
+  } else nm <- paste0("subchunk_", nm)
   sub.chunk <- sprintf("\n```{r %s, fig.width=%s, fig.height=%s, echo=FALSE, %s}\n(%s)()\n```\n", nm, w, h, more.args, p.deparsed)
   cat(trimws(knitr::knit(text=knitr::knit_expand(text=sub.chunk), quiet=TRUE)))
 }
 
 
-plot.xy <- function(x, y, xlab=NULL, ylab=NULL, dat=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.subset=NULL, label.outliers=FALSE, outliers.cutoff=0.01, label.size=3, alpha=0.8, density="auto", diag=FALSE, trend="lm", cor.method=c("pearson","spearman","kendall"), cor.pos="auto", cor.size=4, do.plot=TRUE) {
+plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.subset=NULL, label.outliers=FALSE, outliers.cutoff=0.01, label.size=3, alpha=0.8, density="auto", diag=FALSE, trend="lm", cor.method=c("pearson","spearman","kendall"), cor.pos="auto", cor.size=4, do.plot=TRUE) {
   # 2-D scatter plot
   # x, y: numeric vectors of the same size, or column names in dat if dat is not NULL and provided as a data.frame or data.table or matrix
   # color, shape, size: vectors in the same order as x/y/rows of dat for plotting (can be a named list to customize legend title), or column names in dat if dat is not NULL
@@ -151,11 +154,11 @@ plot.xy <- function(x, y, xlab=NULL, ylab=NULL, dat=NULL, color=NULL, shape=NULL
     symb <- switch(cor.method, pearson="r", spearman="rho", kendall="tau")
     pval <- ct$p.value
     r <- ct$estimate
-    if (pval>=2.2e-16) lab <- sprintf("%s=%.3f\nP=%.3g", symb, r, pval) else lab <- sprintf("%s=%.3f\nP<2.2e-16", symb, r)
+    if (is.na(pval)) lab <- sprintf("%s=%.3f\nP=NA", symb, r) else if (pval>=2.2e-16) lab <- sprintf("%s=%.3f\nP=%.3g", symb, r, pval) else lab <- sprintf("%s=%.3f\nP<2.2e-16", symb, r)
     if (length(cor.pos)==1 && cor.pos=="auto") {
       if (!exists("dmat")) dmat <- table(cut(dat[[x]], breaks=5), cut(dat[[y]], breaks=5))
       tmp <- which(dmat==min(dmat))
-      if (r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
+      if (is.na(r) || r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
       else tmp1 <- match(c(25,20,24,15,19,23,1,2,6,3,7,11,10,14,18,22,4,8,12,16,5,9,13,17,21), tmp)
       tmp <- tmp[tmp1[!is.na(tmp1)][1]]
       i <- tmp %% 5
@@ -163,8 +166,8 @@ plot.xy <- function(x, y, xlab=NULL, ylab=NULL, dat=NULL, color=NULL, shape=NULL
       j <- (tmp-1) %/% 5 + 1
       cor.pos.x <- (1.1-0.2*i)*min(as.numeric(dat[[x]]),na.rm=TRUE)+(0.2*i-0.1)*max(as.numeric(dat[[x]]),na.rm=TRUE)
       cor.pos.y <- (1.1-0.2*j)*min(as.numeric(dat[[y]]),na.rm=TRUE)+(0.2*j-0.1)*max(as.numeric(dat[[y]]),na.rm=TRUE)
-      if (is.Date(dat[[x]])) cor.pos.x <- as.Date(cor.pos.x, origin="1970-01-01")
-      if (is.Date(dat[[y]])) cor.pos.y <- as.Date(cor.pos.y, origin="1970-01-01")
+      if (lubridate::is.Date(dat[[x]])) cor.pos.x <- as.Date(cor.pos.x, origin="1970-01-01")
+      if (lubridate::is.Date(dat[[y]])) cor.pos.y <- as.Date(cor.pos.y, origin="1970-01-01")
     } else {
       cor.pos.x <- cor.pos[1]
       cor.pos.y <- cor.pos[2]
