@@ -23,6 +23,9 @@ Depends:
     ggrepel,
     ggpubr,
     cowplot,
+    grid,
+    gridExtra,
+    gtable,
     latex2exp,
     RColorBrewer
 Imports:

@@ -558,8 +558,8 @@ plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="over
 
 
 thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
-	lgd=c(NA,"none","right","bottom","left","top"), lgd.dir=c(NA,"vertical","horizontal"), lgd.box=c(NA,"vertical","horizontal"),
-	lgd.tit=NA, lgd.txt=NA, lgd.key=NA, lgd.margin=NA, plt.margin=NA) {
+  lgd=c(NA,"none","right","bottom","left","top"), lgd.dir=c(NA,"vertical","horizontal"), lgd.box=c(NA,"vertical","horizontal"),
+  lgd.tit=NA, lgd.txt=NA, lgd.key=NA, lgd.margin=NA, plt.margin=NA) {
   # shorthand for ggplot2::theme() used for adjusting axes labels, legends, and plot margins
   # NULL means element_blank(), NA means not specified (i.e. default)
   # for arguments corresponding to text elements, can give a single number for text size, or give a named list of parameters, which will be passed to element_text()
@@ -599,6 +599,357 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
     plot.margin=f(plt.margin, "pt")
   )
 
-  pars <- pars[!sapply(pars, is.null)]  
+  pars <- pars[!sapply(pars, is.null)]
   do.call(theme, pars)
 }
+
+
+.plot.fracs <- function(dat, xlab=NULL, ylab="Fraction", tit=NULL, facet.tit=NULL, lab=NULL, clrs=NULL, mdat=NULL, xclrs=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.pad=0, rs.dend=0.12, ori=c("h", "v"), no.axs=FALSE, no.nlab=FALSE, no.lgd=FALSE, lgd.pos="bottom", lgd.tit=NULL, lgd.mgn=NULL, rs.lgd=0.1, ret.axs=FALSE, ...) {
+  # inner plotting function of plot.fracs for plotting proportion stacked barplots with geom_bar(..., position="fill")
+  # facet.tit: if not NULL, will place everything under a single facet with this label
+  # no.axs: do not plot X or Y axis depending on plot direction
+  # no.nlab: do not add the "Total #" label
+  # the above options are used for plotting each group in grouped bar plots (the groups will be combined with cowplot::plot_grid downstream)
+  # ret.axs: return only the Y axis; for dendro=TRUE this did not work well and was not used
+
+  xord <- match.arg(xord)
+  dir <- match.arg(ori)
+
+  if (ret.axs) no.axs <- FALSE
+  if (xord=="clust" && uniqueN(dat$x)<=2) xord <- "keep"
+  if (xord=="clust") {
+    mat <- dt2mat(dcast(dat, x~ygrp, value.var="y"))
+    mat[is.na(mat)] <- 0
+    if (is.null(clust.fun)) {
+      hc <- hclust(dist(mat))
+      xlvls <- rownames(mat)[hc$order]
+    } else {
+      hc <- clust.fun(mat)
+      if (class(hc)=="hclust") {
+        xlvls <- rownames(mat)[hc$order]
+      } else if (is.vector(hc)) {
+        xlvls <- hc
+      } else stop("`clust.fun` applied to the data matrix did not return an hclust object or a vector of reordered sample names.")
+    }
+    if (dendro) {
+      tmp <- ggdendro::dendro_data(as.dendrogram(hc), type="rectangle")
+      dend <- ggplot(ggdendro::segment(tmp)) +
+        xlab(xlab) +
+        geom_segment(aes(x=x, y=y, xend=xend, yend=yend)) +
+        ggdendro::theme_dendro()
+      if (dir=="h") {
+        dend <- dend + coord_flip() + xlim(length(xlvls)+dend.pad, 1-dend.pad) + scale_y_reverse()
+        if (!is.null(xlab)) dend <- dend + theme(axis.title.y=element_text())
+        if (ret.axs) {
+          dend <- dend + theme(
+            axis.line.x=element_line(color="white"),
+            axis.ticks.x=element_line(color="white"),
+            axis.title.x=element_text(color="white"),
+            axis.text.x=element_text(color="white")
+          )
+        }
+      } else if (dir=="v") {
+        dend <- dend + xlim(1-dend.pad, length(xlvls)+dend.pad) + scale_y_reverse()
+        if (!is.null(xlab)) dend <- dend + theme(axis.title.x=element_text(color="black")) # needs to specify color to override theme_dendro(), a bug
+        if (ret.axs) {
+          dend <- dend + theme(
+            axis.line.y=element_line(color="white"),
+            axis.ticks.y=element_line(color="white"),
+            axis.title.y=element_text(color="white"),
+            axis.text.y=element_text(color="white")
+          )
+        }
+      }
+    }
+  } else if (xord=="keep") {
+    if (is.factor(dat$x)) xlvls <- levels(dat$x) else xlvls <- unique(dat$x)
+  } else xlvls <- levels(factor(dat$x))
+  xlvls <- xlvls[xlvls %in% dat$x]
+  if (dir=="h") xlvls <- rev(xlvls)
+
+  dat1 <- copy(dat)
+  dat1[, x:=factor(x, levels=xlvls)]
+  if (is.factor(dat1$ygrp)) ylvls <- rev(levels(dat1$ygrp)) else ylvls <- rev(levels(factor(dat1$ygrp)))
+  dat1[, ygrp:=factor(ygrp, levels=ylvls)]
+  if (!is.null(facet.tit)) dat1[, fct:=facet.tit]
+  if (!is.null(mdat)) mdat <- mdat[match(xlvls, x)]
+
+  p <- ggplot(dat1, aes(x=x, y=y, fill=ygrp)) +
+    ggtitle(tit) + xlab(xlab) + scale_y_continuous(name=ylab, breaks=seq(0, 1, 0.1)) +
+    { if (is.null(facet.tit)) NULL else facet_wrap(~fct, strip.position=switch(dir, h="right", v="top")) } +
+    geom_bar(stat="identity", position="fill", width=0.85, color="grey50", size=0.2) +
+    { if ("sep" %in% names(mdat)) geom_vline(xintercept=mdat[, which(sep!=sep[c(2:.N,.N)])+0.5], size=0.2, color="grey50") else NULL } +
+    { if (is.null(clrs)) scale_fill_discrete(name=lgd.tit, guide=guide_legend(title.position=if (lgd.pos=="bottom") "bottom" else "top", title.hjust=if (lgd.pos=="bottom") 0.5 else 0, ...)) else scale_fill_manual(name=lgd.tit, values=clrs, guide=guide_legend(title.position=if (lgd.pos=="bottom") "bottom" else "top", title.hjust=if (lgd.pos=="bottom") 0.5 else 0, ...)) } +
+    { if (is.null(lab)) NULL else geom_text(aes_string(label=if (isTRUE(lab)) "ygrp" else lab), size=3, position=position_fill(vjust=0.5)) } +
+    { if ("ntot" %in% names(mdat) && !no.nlab) annotate(geom="text", x=length(xlvls)+1, y=1.05, label="Total #", size=3, angle=switch(dir, h=0, v=90)) else NULL } +
+    { if ("ntot" %in% names(mdat)) annotate(geom="text", x=1:length(xlvls), y=1.05, label=mdat$ntot, size=3, angle=switch(dir, h=0, v=90)) else NULL } +
+    theme_classic()
+
+  if (dir=="h") {
+    p <- p + coord_flip(clip="off") + theme(
+      plot.title=if (is.null(tit)) element_blank() else element_text(),
+      axis.text.x=if (no.axs) element_blank() else element_text(hjust=1, angle=35),
+      axis.title.x=if (no.axs) element_blank() else element_text(),
+      axis.line.x=if (no.axs) element_blank() else element_line(),
+      axis.ticks.x=if (no.axs) element_blank() else element_line(),
+      axis.text.y=if (is.null(xclrs)) element_text() else element_text(color=xclrs[xlvls]),
+      axis.title.y=if (is.null(xlab) || dendro) element_blank() else element_text(),
+      panel.grid.major.x=element_line(size=0.2, color="grey50"),
+      strip.text=element_text(size=9, margin=margin(0,2,0,2)),
+      strip.background=element_rect(size=0.6),
+      plot.margin=if (no.nlab) margin(0,0,0,0) else margin(10,0,0,0),
+      legend.position=if (no.lgd) "none" else lgd.pos,
+      legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
+      legend.text=element_text(size=8),
+      legend.key.size=unit(8,"pt"),
+      legend.box.margin=if (lgd.pos=="bottom") margin(c(-10,10,0,0)) else margin()
+    )
+  } else if (dir=="v") {
+    p <- p + coord_cartesian(clip="off") + theme(
+      plot.title=if (is.null(tit)) element_blank() else element_text(),
+      axis.text.y=if (no.axs) element_blank() else element_text(),
+      axis.title.y=if (no.axs) element_blank() else element_text(),
+      axis.line.y=if (no.axs) element_blank() else element_line(),
+      axis.ticks.y=if (no.axs) element_blank() else element_line(),
+      axis.text.x=if (is.null(xclrs)) element_text(angle=90, hjust=1, vjust=0.5) else element_text(angle=90, hjust=1, vjust=0.5, color=xclrs[xlvls]),
+      axis.title.x=if (is.null(xlab) || dendro) element_blank() else element_text(),
+      panel.grid.major.y=element_line(size=0.2, color="grey50"),
+      strip.text=element_text(size=9, margin=margin(2,0,2,0)),
+      strip.background=element_rect(size=0.6),
+      plot.margin=if (no.nlab) margin(0,0,0,0) else margin(0,10,0,0),
+      legend.position=if (no.lgd) "none" else lgd.pos,
+      legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
+      legend.text=element_text(size=8),
+      legend.key.size=unit(8,"pt"),
+      legend.box.margin=if (!is.null(lgd.mgn)) margin(lgd.mgn) else if (lgd.pos=="bottom") margin(c(-10,10,0,0)) else margin()
+    )
+  }
+
+  if (ret.axs) {
+    if (dir=="h") {
+      axs <- gtable::gtable_filter(ggplotGrob(p), 'axis-b|xlab-b', trim=FALSE)
+      axs <- gtable::gtable_add_padding(axs, unit(c(0,0,6,0), "pt"))
+    } else if (dir=="v") {
+      axs <- gtable::gtable_filter(ggplotGrob(p), 'axis-l|ylab-l', trim=FALSE)
+      axs <- gtable::gtable_add_padding(axs, unit(c(0,0,0,6), "pt"))
+    }
+    if (dendro) {
+      if (dir=="h") {
+        daxs <- gtable::gtable_filter(ggplotGrob(dend), 'axis-b|xlab-b', trim=FALSE)
+        daxs <- gtable::gtable_add_padding(daxs, unit(c(0,0,6,0), "pt"))
+        axs <- arrangeGrob(axs, left=daxs, widths=c(1, 0.15))
+      } else if (dir=="v") {
+        daxs <- gtable::gtable_filter(ggplotGrob(dend), 'axis-l|ylab-l', trim=FALSE)
+        daxs <- gtable::gtable_add_padding(daxs, unit(c(0,1,0,6), "pt"))
+        axs <- arrangeGrob(axs, bottom=daxs, heights=c(1, 0.1))
+      }
+    }
+    return(axs)
+  }
+
+  if (dendro) {
+    if (dir=="h") {
+      cowplot::plot_grid(dend, p, nrow=1, align="h", axis="tb", rel_widths=c(rs.dend, 1))
+    } else if (dir=="v") {
+      if (!no.lgd && lgd.pos=="bottom") {
+        lgd <- cowplot::get_legend(p)
+        p <- p + theme(legend.position="none")
+        cowplot::plot_grid(p, dend, lgd, ncol=1, align="v", axis="lr", rel_heights=c(1, rs.dend, rs.lgd))
+      } else {
+        cowplot::plot_grid(p, dend, ncol=1, align="v", axis="lr", rel_heights=c(1, rs.dend))
+      }
+    }
+  } else p
+}
+
+plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=NULL, xvar=NULL, ygrp=NULL, yvar=NULL, lab=NULL, mdat=NULL, mdat.xvar=NULL, ntot=NULL, xgrp=NULL, xcol=NULL, xsep=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.pad=0, rs.dend=0.12, yord=c("default", "keep"), lgd.tit=NULL, lgd.pos=c("bottom", "right"), rs.xgrp=NULL, rs.lgd=NULL, ori=c("h", "v"), ...) {
+  # function for visualizing fraction data with proportion stacked bar plots (i.e. with geom_bar(..., position="fill"))
+  # dat: a variable-by-sample matrix or a data.table in the long format
+  # mode: whether the data values are counts or fractions
+  # xvar, ygrp, yvar: if dat is a long data.table, these are required and are the column names in dat corresponding to the sample, variable, and variable value (i.e. count or fraction values) respectively
+  # lab: if not NULL, labels will be placed on each bar: if TRUE, the labels will be the variable names; if dat is a long data.table, can also be a column name and the corresponding values in this column will be used as the labels
+  # mdat: optional, a data.table of sample-level meta data, one row per sample
+  # mdat.xvar: the column name in mdat for sample (if NULL will use xvar, and if xvar is NULL will assume the first column)
+  # ntot: if dat is fraction, can provide total count per sample data here; if dat is count, will calculate total count from dat and this will be ignored; provided either as a vector (preferentially named by sample name) or a column name in mdat (if the latter is provided)
+  # xgrp: sample group, if not NULL, will plot bar plots for each group and then combine all plots with cowplot::plot_grid; provided similarly as ntot; this can be a factor and its levels determine the order of the plots
+  # xcol: variable used to color the sample names (i.e. axis texts); provided similarly as xgrp; if a factor the levels will affect color mapping
+  # xsep: variable used to group the sample within each plot by separating lines; provided similarly as ntot
+  # xord: sample order in each plot, "clust" for clustering (by default hclust on dist on default parameters, can also provide clust.fun, a function that takes the data matrix and returns the ordered sample names after clustering), "default" for default converting-to-factor behavior, "keep" for keeping the original order in dat
+  # dendro: if TRUE and xord="clust", show dendrogram; will be ignored if xord!="clust"
+  # dend.pad: padding of dendrogram on both sides, used to manually ensure alignment between the dendrogram and main plot (unfortunately I did not find a general way of perfect alignment automatically); if xgrp is not NULL, may provide a vector in the same length and order as the sample groups
+  # rs.dend: size of dendrogram relative to main plot, provide as a single number
+  # yord: ordering of the variables, "default" for roughly decreasing order by the median fraction across sample, "keep" for keeping original order in dat
+  # lgd.tit, lgd.pos: legend title and position
+  # ori: plot orientation (horizontal or vertical; if "h", the bars will be horizontal, i.e. each sample is a row, Y-axis is sample; vice versa for "v"); note: initially I named this "dir" but there seems to be a conflict with ... passed to guide_legend()
+  # rs.xgrp: for adjusting relative sizes of the sample groups; if needed provide as a vector with the same length as the number of groups (xgrp) and in the corresponding order (in terms of the final order of xgrp); in terms of corresponding to the plots, the order is left to right or top to bottom; the values are adjustments to default, i.e. should usually be around 0 +- ~0.? to < ~5
+  # rs.lgd: size of legend relative to main plot, provide as needed as a single number
+  # ...: passed to scale_fill_?(guide=guide_legend(...))
+
+  mode <- match.arg(mode)
+  xord <- match.arg(xord)
+  yord <- match.arg(yord)
+  dir <- match.arg(ori)
+  lgd.pos <- match.arg(lgd.pos)
+
+  if (is.matrix(dat)) {
+    if (mode=="count") {
+      ntot <- colSums(dat)
+      dat <- dat/rep(colSums(dat), each=nrow(dat))
+    }
+    dat <- melt(cbind(ygrp=rownames(dat), as.data.table(dat)), id.vars="ygrp", variable.name="x", value.name="y")
+    if (missing(xlab)) xlab <- NULL
+  } else {
+    dat <- dat[, .(x=get(xvar), ygrp=get(ygrp), y=get(yvar))]
+    if (mode=="count") {
+      ntot <- dat[, .(n=sum(y, na.rm=TRUE)), by=x][, setNames(n, x)]
+      dat <- dat[, .(ygrp, y=y/sum(y, na.rm=TRUE)), by=x]
+    }
+    if (missing(xlab)) xlab <- xvar
+  }
+
+  tmp <- dat[, .(ymed=median(y, na.rm=TRUE), ymax=max(y, na.rm=TRUE)), by=ygrp][order(-ymed)]
+  if (yord=="keep") {
+    if (is.factor(dat$ygrp)) ylvls <- levels(dat$ygrp) else ylvls <- unique(dat$ygrp)
+  } else if (yord=="default") ylvls <- as.character(tmp$ygrp)
+  ncl <- length(my.cols())
+  if (length(ylvls)<=ncl) {
+    clrs <- my.cols(ylvls)
+  } else {
+    if (yord=="default") {
+      tmp1 <- tmp[, which(ymax>0.05)]
+      tmp2 <- tmp[, which(ymax<=0.05)]
+      idxs <- 1:(ncl-1)
+      n1 <- sum(tmp1>=ncl)
+      n2 <- sum(tmp2<ncl)
+      if (n1>0 && n2>0) {
+        if (n1>=n2) idxs[idxs %in% tmp2[tmp2<ncl]] <- tmp1[tmp1>=ncl][1:n2]
+          else idxs[idxs %in% rev(tmp2[tmp2<ncl])[1:n1]] <- tmp1[tmp1>=ncl]
+      }
+      clrs <- my.cols(tmp[idxs, ygrp])
+      clrs <- c(clrs, setNames(rep(my.cols()[ncl], tmp[-idxs, .N]), tmp[-idxs, ygrp]))
+      ylvls <- names(clrs)
+    } else if (yord=="keep") {
+      clrs <- my.cols(ylvls[1:ncl])
+      clrs <- c(clrs, setNames(rep(my.cols()[ncl], length(ylvls)-ncl), ylvls[-1:-ncl]))
+    }
+  }
+  dat[, ygrp:=factor(ygrp, levels=ylvls)]
+
+  if (!is.null(mdat)) {
+    mdat <- copy(mdat)
+    if (!is.null(mdat.xvar)) tmp <- mdat.xvar else if (!is.null(xvar)) tmp <- xvar else tmp <- names(mdat)[1]
+    setnames(mdat, tmp, "x")
+    if (mode=="count") mdat[, ntot:=ntot[x]] else if (!is.null(ntot)) setnames(mdat, ntot, "ntot")
+    if (!is.null(xgrp)) {
+      setnames(mdat, xgrp, "grp")
+      if (!is.factor(mdat$grp)) mdat[, grp:=factor(grp)]
+    }
+    if (!is.null(xcol)) {
+      setnames(mdat, xcol, "col")
+      if (!is.factor(mdat$col)) mdat[, col:=factor(col)]
+      xclrs <- mdat[, setNames(my.cols(levels(col))[col], x)]
+    } else xclrs <- NULL
+    if (!is.null(xsep)) setnames(mdat, xsep, "sep")
+  } else {
+    mdat <- data.table(x=unique(dat$x))
+    if (mode=="count") {
+      mdat[, ntot:=ntot[x]]
+    } else if (!is.null(ntot)) {
+      if (is.null(names(ntot))) mdat[, ntot:=ntot] else mdat[, ntot:=ntot[x]]
+    }
+    if (!is.null(xgrp)) {
+      if (is.null(names(xgrp))) mdat[, grp:=xgrp] else mdat[, grp:=xgrp[x]]
+      if (!is.factor(mdat$grp)) mdat[, grp:=factor(grp)]
+    }
+    if (!is.null(xcol)) {
+      if (is.null(names(xcol))) mdat[, col:=xcol] else mdat[, col:=xcol[x]]
+      if (!is.factor(mdat$col)) mdat[, col:=factor(col)]
+      xclrs <- mdat[, setNames(my.cols(levels(col))[col], x)]
+    } else xclrs <- NULL
+    if (!is.null(xsep)) {
+      if (is.null(names(xsep))) mdat[, sep:=xsep] else mdat[, sep:=xsep[x]]
+    }
+  }
+  if (!any(c("ntot", "grp", "col", "sep") %in% names(mdat))) mdat <- NULL
+
+  if (!is.null(xgrp)) {
+    grps <- levels(mdat$grp)
+    if (length(dend.pad)==1) dend.pad <- rep(dend.pad, 3)
+    if (is.null(names(dend.pad))) names(dend.pad) <- grps
+    p.list <- lapply(grps, function(i) {
+      mdat1 <- mdat[grp==i]
+      dat1 <- dat[x %in% mdat1$x]
+      # if w/o dendrogram, I first plot each group w/o Y-axis and later add a common Y-axis, this will make it easier to set a useable default rs.xgrp
+      # but if with dendrogram, I cannot get the above approach to work so I include Y-axis in the first/last plot; as a result manual adjustment of rs.xgrp is usually necessary
+      if (dendro) {
+        .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=i, lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.pad=dend.pad[i], rs.dend=rs.dend, ori=dir, no.axs=switch(dir, h=i!=grps[length(grps)], v=i!=grps[1]), no.nlab=switch(dir, h=i!=grps[1], v=i!=grps[length(grps)]), no.lgd=TRUE)
+      } else .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=i, lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.pad=dend.pad[i], rs.dend=rs.dend, ori=dir, no.axs=TRUE, no.nlab=switch(dir, h=i!=grps[1], v=i!=grps[length(grps)]), no.lgd=TRUE)
+    })
+    rel <- mdat[, .(n=.N), by=grp][order(grp), n]
+    rel[rel %in% 1:2] <- rel[rel %in% 1:2]+0.4
+    rel[rel %in% 3:4] <- rel[rel %in% 3:4]+0.2
+    if (!is.null(rs.xgrp)) rel <- rel+rs.xgrp
+    if (lgd.pos=="bottom") {
+      lgd.mgn <- switch(dir, h=c(-10,10,0,0), v=c(0,10,0,0))
+    } else lgd.mgn <- NULL
+    lgd <- cowplot::get_legend(.plot.fracs(dat, facet.tit="", clrs=clrs, mdat=mdat, dendro=FALSE, ori=dir, lgd.tit=lgd.tit, lgd.pos=lgd.pos, lgd.mgn=lgd.mgn, ...))
+    if (dir=="h") {
+      rel[1] <- rel[1]+1
+      if (dendro) {
+        tmp <- 1+0.0075*min(sum(rel), 50)/max(rel[length(rel)]/sum(rel), 0.1)
+        rel[length(rel)] <- rel[length(rel)]+tmp
+      }
+      p <- cowplot::plot_grid(plotlist=p.list, ncol=1, align="v", axis="lr", rel_heights=rel)
+      if (!dendro) {
+        mdat1 <- mdat[grp==grps[length(grps)]]
+        dat1 <- dat[x %in% mdat1$x]
+        y.axs <- .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=grps[length(grps)], lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.pad=dend.pad[grps[length(grps)]], rs.dend=rs.dend, ori=dir, no.nlab=TRUE, no.lgd=TRUE, ret.axs=TRUE)
+        p <- gridExtra::arrangeGrob(p, bottom=y.axs)
+      }
+      if (!is.null(xlab)) {
+        x.tit <- grid::textGrob(xlab, gp=grid::gpar(fontsize=10), rot=90)
+        p <- gridExtra::arrangeGrob(p, left=x.tit)
+      }
+      if (lgd.pos=="bottom") {
+        if (is.null(rs.lgd)) rs.lgd <- c(0.2+min(0.25*uniqueN(dat$x)+0.45, 2), 0.2)
+        p <- cowplot::plot_grid(p, lgd, ncol=1, rel_heights=rs.lgd)
+      } else if (lgd.pos=="right") {
+        if (is.null(rs.lgd)) rs.lgd <- c(5, 0.1+0.1*max(nchar(ylvls)))
+        p <- cowplot::plot_grid(p, lgd, nrow=1, rel_widths=rs.lgd)
+      }
+    } else if (dir=="v") {
+      rel[length(rel)] <- rel[length(rel)]+1
+      if (dendro) {
+        tmp <- 1+0.0075*min(sum(rel), 50)/max(rel[1]/sum(rel), 0.1)
+        rel[1] <- rel[1]+tmp
+      }
+      p <- cowplot::plot_grid(plotlist=p.list, nrow=1, align="h", axis="tb", rel_widths=rel)
+      if (!dendro) {
+        mdat1 <- mdat[grp==grps[1]]
+        dat1 <- dat[x %in% mdat1$x]
+        y.axs <- .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=grps[1], lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.pad=dend.pad[grps[1]], rs.dend=rs.dend, ori=dir, no.nlab=TRUE, no.lgd=TRUE, ret.axs=TRUE)
+        p <- gridExtra::arrangeGrob(p, left=y.axs)
+      }
+      if (!is.null(xlab)) {
+        x.tit <- grid::textGrob(xlab, gp=grid::gpar(fontsize=10))
+        p <- gridExtra::arrangeGrob(p, bottom=x.tit)
+      }
+      if (lgd.pos=="bottom") {
+        if (is.null(rs.lgd)) rs.lgd <- 0.1
+        p <- cowplot::plot_grid(p, lgd, ncol=1, rel_heights=c(1, rs.lgd))
+      } else if (lgd.pos=="right") {
+        if (is.null(rs.lgd)) rs.lgd <- c(0.2+min(0.25*uniqueN(dat$x)+0.45, 2), 0.1+0.1*max(nchar(ylvls)))
+        p <- cowplot::plot_grid(p, lgd, nrow=1, rel_widths=rs.lgd)
+      }
+    }
+    if (!is.null(tit)) {
+      p.tit <- grid::textGrob(tit, gp=grid::gpar(fontsize=12))
+      p <- cowplot::plot_grid(gridExtra::arrangeGrob(p, top=p.tit))
+    }
+  } else {
+    if (is.null(rs.lgd)) rs.lgd <- 0.1
+    p <- .plot.fracs(dat, xlab=xlab, ylab=ylab, tit=tit, lab=lab, clrs=clrs, mdat=mdat, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.pad=dend.pad, rs.dend=rs.dend, ori=dir, lgd.tit=lgd.tit, lgd.pos=lgd.pos, rs.lgd=rs.lgd, ...)
+  }
+  p
+}
+
