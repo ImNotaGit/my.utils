@@ -187,8 +187,8 @@ wilcox3 <- function(s1, s2, s3, snames=NULL, ...) {
   w13 <- wilcox(s1, s3, ...)
   # labels for group comparisons
   if (!is.null(snames)) {
-    lab <- c(paste(snames[1],snames[2],sep=" vs "), paste(snames[2],snames[3],sep=" vs "), paste(snames[1],snames[3],sep=" vs "))
-  } else lab <- c("1vs2", "2vs3", "1vs3")
+    lab <- c(paste(snames[2],snames[1],sep=" vs "), paste(snames[3],snames[2],sep=" vs "), paste(snames[3],snames[1],sep=" vs "))
+  } else lab <- c("2vs1", "3vs2", "3vs1")
   res <- cbind(comparison=lab, rbind(w12, w23, w13))
   res[, padj:=p.adjust(pval, "BH")]
   return(res)
