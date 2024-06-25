@@ -343,7 +343,7 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   if (!is.null(pars$contrast)) {
     if (!contr.to.coef) {
       if (!exists("fit0")) fit0 <- pass3dots(limma::lmFit, pars$dat, design=pars$design, ...)
-      pars$coef <- lapply(pars$contrast, function(x) if (is.matrix(x)) 1:ncol(x) else 1)
+      pars$coef.contr <- lapply(pars$contrast, function(x) if (is.matrix(x)) 1:ncol(x) else 1)
       tmp <- mapply(function(contrast, coef) {
         fit <- limma::contrasts.fit(fit0, contrast)
         fit <- pass3dots(limma::eBayes, fit, ...)
