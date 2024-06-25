@@ -46,7 +46,7 @@ prep.array <- function(dat, log="default", norm.method="loess") {
   # log: whether to log2(x+1) data; "default" automatically determines whether to transform
   # norm.method: either "loess" or "quantile"; "loess" won't work if the data contains NA, so if any NA will first set these to 0 with warning
 
-  if (class(dat)=="ExpressionSet") {
+  if (length(class(dat))==1 && class(dat)=="ExpressionSet") {
     # for featureData, fix potential improper column names so that later limma::topTable can use them
     fvarLabels(dat) <- make.names(fvarLabels(dat))
     mat <- exprs(dat)
@@ -296,7 +296,7 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, summary=de.res), otherwise return de.res
   # ...: passed to limma::lmFit, limma::eBayes and limma::topTable, e.g. `robust` and `trend` for limma::eBayes, set these to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods can be more recommended)
 
-  if (class(dat)=="ExpressionSet") {
+  if (length(class(dat))==1 && class(dat)=="ExpressionSet") {
     mat <- exprs(dat)
     if (!isFALSE(gene.colname)) {
       if (is.character(gene.colname)) {
