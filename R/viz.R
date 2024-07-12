@@ -616,7 +616,10 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   dir <- match.arg(ori)
 
   if (ret.axs) no.axs <- FALSE
-  if (xord=="clust" && uniqueN(dat$x)<=2) xord <- "keep"
+  if (xord=="clust" && uniqueN(dat$x)==1) {
+    xord <- "keep"
+    dendro <- FALSE
+  }
   if (xord=="clust") {
     mat <- dt2mat(dcast(dat, x~ygrp, value.var="y"))
     mat[is.na(mat)] <- 0
@@ -790,6 +793,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
   yord <- match.arg(yord)
   dir <- match.arg(ori)
   lgd.pos <- match.arg(lgd.pos)
+  if (xord!="clust") dendro <- FALSE
 
   if (is.matrix(dat)) {
     if (mode=="count") {
