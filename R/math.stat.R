@@ -811,6 +811,12 @@ run.clm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chi
 
   library(ordinal) # the package was imported but not attached; attach it if this function is called
   drop.test <- match.arg(drop.test)
+  # make sure the response (dependent) variable is a factor
+  yvar <- as.character(model)[2]
+  if (!is.factor(dat[[yvar]])) {
+    message(sprintf("The response variable `%s` is not a factor, will convert it to factor.", yvar))
+    dat[, c(yvar):=factor(get(yvar))]
+  }
   run.f(f=clm, data=dat, formula=model, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
 }
 
