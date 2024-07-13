@@ -747,6 +747,7 @@ run.multinom <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binom
   library(nnet)
   library(lmtest)
   drop.test <- match.arg(drop.test)
+  environment(model) <- environment() # fix for error when calling summary(fit) below
   tryCatch({
     if (is.null(design)) {
       fit <- multinom(formula=model, data=dat)
