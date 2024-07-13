@@ -279,7 +279,8 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
     print(pld)
   }
 
-  invisible(list(pca=res, scree.plot.data=var.dat, scree.plot=pvar, elbow=elbow, pc.plot.data=p$plot.data, pc.plot=p$p, loading.plot.data=loadings, loading.plot=pld, outliers=if ("outlier" %in% names(p$plot.data)) p$plot.data[outlier==TRUE, label] else NULL))
+  if (isTRUE(label) || (label.outliers && is.null(label))) label <- "label"
+  invisible(list(pca=res, scree.plot.data=var.dat, scree.plot=pvar, elbow=elbow, pc.plot.data=p$plot.data, pc.plot=p$p, loading.plot.data=loadings, loading.plot=pld, outliers=if ("outlier" %in% names(p$plot.data)) p$plot.data[outlier==TRUE, get(label)] else NULL))
 }
 
 
@@ -618,7 +619,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   if (ret.axs) no.axs <- FALSE
   if (xord=="clust" && uniqueN(dat$x)==1) {
     xord <- "keep"
-    dendro <- FALSE
+    dendro <- FALSE # there will be an issue if there are multiple sample groups (xgrps in plot.fracs) and the other groups have >1 samples and dendro=TRUE; for now I ignore such cases
   }
   if (xord=="clust") {
     mat <- dt2mat(dcast(dat, x~ygrp, value.var="y"))
