@@ -237,7 +237,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
     theme(panel.grid.major.y=element_line(size=0.4),
           legend.position="none")
 
-  dat <- cbind(x=res$x[, pc.x], y=res$x[, pc.y])
+  dat <- data.frame(x=res$x[, pc.x], y=res$x[, pc.y])
   if (!is.null(data)) {
     if (nrow(data)!=nrow(dat)) stop("mat and data have different numbers of rows!")
     dat <- cbind(dat, as.data.frame(data))
@@ -280,7 +280,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
   }
 
   if (isTRUE(label) || (label.outliers && is.null(label)) || !(length(label)==1 && label %in% names(dat))) label <- "label"
-  invisible(list(pca=res, scree.plot.data=var.dat, scree.plot=pvar, elbow=elbow, pc.plot.data=p$plot.data, pc.plot=p$p, loading.plot.data=loadings, loading.plot=pld, outliers=if ("outlier" %in% names(p$plot.data)) p$plot.data[outlier==TRUE, get(label)] else NULL))
+  invisible(list(pca=res, scree.plot.data=var.dat, scree.plot=pvar, elbow=elbow, pc.plot.data=p$plot.data, pc.plot=p$p, loading.plot.data=loadings, loading.plot=pld, outliers=if ("outlier" %in% names(p$plot.data)) p$plot.data[outlier==TRUE][[label]] else NULL)) # for outliers need to use [[label]] instead of get(label)
 }
 
 
