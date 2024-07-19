@@ -30,6 +30,7 @@ Depends:
     RColorBrewer
 Imports:
     Matrix,
+    sparseMatrixStats,
     survival,
     pROC,
     PRROC,
