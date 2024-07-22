@@ -1040,12 +1040,12 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
 }
 
 
-summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=mean, t1=scale, f2=mean, t2=NULL, pct=TRUE, expr.cutoff=0, ncells.cutoff=10, ret.no.t=FALSE, ret.grp.sizes=FALSE) {
+summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=mean, t1=scale, f2=mean, t2=NULL, pct=TRUE, expr.cutoff=0, ncells.cutoff=10, ret.no.t=FALSE, ret.grp.sizes=FALSE) {
   # summarize (single-cell) gene expression by group, i.e. get the average (or other location statistics) by group (potentially with additional blocking/stratification), and optionally get the percent of cells with expression
   # this may be used for other similar summarization tasks as well.
-  # mat: gene-by-cell matrix, assuming log-normalized; sparse and non-sparse both work (sparseMatrixStats functions also works for non-sparse matrices)
+  # dat: gene-by-cell matrix, assuming log-normalized; sparse and non-sparse both work (sparseMatrixStats functions also works for non-sparse matrices); or could be a Seurat object
   # gns: a subset of genes, if provided
-  # mdat: cell metadata as a data.frame or data.table, with rows in the same order as the columns of `mat`
+  # mdat: cell metadata as a data.frame or data.table, with rows in the same order as the columns of `dat`; if `dat` is a Seurat object then will automatically use dat@meta.data and this will be ignored
   # grp: column name of grouping variable in `mdat`
   # blk: column name of blocking/stratification variable in `mdat`; group is nested within block, e.g. group may be cell cluster, and block may be sample
   # exp: whether the summary statistics (e.g. mean) should be computed on the count level, i.e. first taking expm1(mat); if the statistics is e.g. median then this has no effect and should be set to FALSE for efficiency
@@ -1060,12 +1060,25 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   # ret.no.t: whether to also return a version non-transformed average results if `t1` or `t2` are given, if TRUE will return as $avg.no.trans (this is for sc.dotplot)
   # ret.grp.sizes: whether to also return the sizes of the groups after removing cells based on ncells.cutoff, if TRUE will return as a named vector as $grp.sizes (this for sc.dotplot)
 
-  if (!is.null(gns)) {
-    tmp <- !gns %in% rownames(mat)
-    if (sum(tmp)>0) message(sprintf("These genes below are not in `mat`:\n%s", paste(gns[tmp], collapse=", ")))
-    mat <- mat[gns[!tmp], , drop=FALSE]
+  if ("Seurat" %in% class(dat)) {
+    if (!requireNamespace(c("Seurat"), quietly=TRUE)) {
+      stop("Packages \"Seurat\" needed for this function to work.")
+    }
+    if (identical(dat$RNA@data, dat$RNA@counts)) {
+      message("dat$RNA is not normalized, will normalize data.\n")
+      dat <- Seurat::NormalizeData(dat, assay="RNA")
+    }
+    mdat <- dat@meta.data
+    dat <- dat$RNA@data
   }
-  if (exp) mat <- expm1(mat) else expr.cutoff <- log1p(expr.cutoff)
+
+  if (!is.null(gns)) {
+    tmp <- gns %in% rownames(dat)
+    if (!any(tmp)) stop("None of the given genes is in `dat`.\n")
+    if (sum(!tmp)>0) message(sprintf("These genes below are not in `dat`:\n%s", paste(gns[!tmp], collapse=", ")))
+    dat <- dat[gns[tmp], , drop=FALSE]
+  }
+  if (exp) dat <- expm1(dat) else expr.cutoff <- log1p(expr.cutoff)
   grp <- mdat[[grp]]
   grp.ss <- table(grp, useNA="ifany")
   names(grp.ss)[is.na(names(grp.ss))] <- "NA"
@@ -1088,11 +1101,11 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
       grp.ss <- grp.ss[names(tmp)[!rmv]]
     }
     if (identical(f1, mean)) {
-      avg <- sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(mat[, idx, drop=FALSE], useNames=TRUE))
+      avg <- sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(dat[, idx, drop=FALSE], useNames=TRUE))
     } else if (identical(f1, median)) {
-      avg <- sapply(idxs, function(idx) sparseMatrixStats::rowMedians(mat[, idx, drop=FALSE], useNames=TRUE))
+      avg <- sapply(idxs, function(idx) sparseMatrixStats::rowMedians(dat[, idx, drop=FALSE], useNames=TRUE))
     } else {
-      avg <- sapply(idxs, function(idx) apply(mat[, idx, drop=FALSE], 1, f1))
+      avg <- sapply(idxs, function(idx) apply(dat[, idx, drop=FALSE], 1, f1))
     }
     if (exp) avg <- log1p(avg)
     if (!is.null(t2)) {
@@ -1105,7 +1118,7 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
     }
     res <- list(avg=avg)
     if (pct) {
-      res$pct <- 100*sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(mat[, idx, drop=FALSE]>expr.cutoff, useNames=TRUE))
+      res$pct <- 100*sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(dat[, idx, drop=FALSE]>expr.cutoff, useNames=TRUE))
     }
 
   } else {
@@ -1139,11 +1152,11 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
       message(sprintf("These combinations of groups and blocks below contain < %d cells, they will be removed:\n%s", ncells.cutoff, paste(tmp[, sprintf("%s in %s: #cells=%d", group, block, n.cells)], collapse="\n")))
     }
     if (identical(f1, mean)) {
-      avg <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(mat[, j, drop=FALSE], useNames=TRUE)))
+      avg <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(dat[, j, drop=FALSE], useNames=TRUE)))
     } else if (identical(f1, median)) {
-      avg <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMedians(mat[, j, drop=FALSE], useNames=TRUE)))
+      avg <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMedians(dat[, j, drop=FALSE], useNames=TRUE)))
     } else {
-      avg <- lapply(idxs, function(js) sapply(js, function(j) apply(mat[, j, drop=FALSE], 1, f1)))
+      avg <- lapply(idxs, function(js) sapply(js, function(j) apply(dat[, j, drop=FALSE], 1, f1)))
     }
     if (!is.null(t1)) {
       if (exp) avg <- lapply(avg, log1p)
@@ -1185,7 +1198,7 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
     }
     res <- list(avg=avg)
     if (pct) {
-      pct <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(mat[, j, drop=FALSE]>expr.cutoff, useNames=TRUE)))
+      pct <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(dat[, j, drop=FALSE]>expr.cutoff, useNames=TRUE)))
       if (identical(f2, mean)) {
         pct <- sapply(grps, function(j) matrixStats::rowMeans2(do.call(cbind, lapply(pct, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
       } else if (identical(f2, median)) {

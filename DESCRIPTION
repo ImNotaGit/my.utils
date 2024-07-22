@@ -59,7 +59,8 @@ Suggests:
     rmote,
     httpgd,
     heatmaply,
-    plotly
+    plotly,
+    Seurat
 Remotes:
     ImNotaGit/nnet,
     hafen/rmote
