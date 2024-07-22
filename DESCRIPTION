@@ -27,7 +27,8 @@ Depends:
     gridExtra,
     gtable,
     latex2exp,
-    RColorBrewer
+    RColorBrewer,
+    colorspace
 Imports:
     Matrix,
     sparseMatrixStats,
@@ -56,7 +57,9 @@ Suggests:
     fgsea,
     clustermq,
     rmote,
-    httpgd
+    httpgd,
+    heatmaply,
+    plotly
 Remotes:
     ImNotaGit/nnet,
     hafen/rmote

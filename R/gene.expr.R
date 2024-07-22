@@ -1040,7 +1040,7 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
 }
 
 
-summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=mean, n1=scale, f2=mean, n2=NULL, pct=TRUE, expr.cutoff=0, ncells.cutoff=10) {
+summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=mean, t1=scale, f2=mean, t2=NULL, pct=TRUE, expr.cutoff=0, ncells.cutoff=10, ret.no.t=FALSE, ret.grp.sizes=FALSE) {
   # summarize (single-cell) gene expression by group, i.e. get the average (or other location statistics) by group (potentially with additional blocking/stratification), and optionally get the percent of cells with expression
   # this may be used for other similar summarization tasks as well.
   # mat: gene-by-cell matrix, assuming log-normalized; sparse and non-sparse both work (sparseMatrixStats functions also works for non-sparse matrices)
@@ -1050,13 +1050,15 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   # blk: column name of blocking/stratification variable in `mdat`; group is nested within block, e.g. group may be cell cluster, and block may be sample
   # exp: whether the summary statistics (e.g. mean) should be computed on the count level, i.e. first taking expm1(mat); if the statistics is e.g. median then this has no effect and should be set to FALSE for efficiency
   # f1: summary function applied to the cells in each group, or if `blk` is given, each combination of group and block
-  # n1: only effective if `blk` is given; normalization function applied across groups within each block after applying `f1`; set to NULL to skip this step
-  # f2: only effective if `blk` is given; summary function applied to each group after applying `f1` and possibly `n1`; if a custom function, please remember to use na.rm=TRUE
-  # n2: normalization function applied finally (regardless of if `blk` is given); set to NULL to skip this
+  # t1: only effective if `blk` is given; transformation function applied across groups within each block after applying `f1`; set to NULL to skip this step
+  # f2: only effective if `blk` is given; summary function applied to each group after applying `f1` and possibly `t1`; if a custom function, please remember to use na.rm=TRUE
+  # t2: transformation function applied finally (regardless of if `blk` is given); set to NULL to skip this
   # with `blk` given, it's also possible to set f2=NULL, then the second summary per group will be skipped, resulting in a summary value for each combination of group and block, and this result will be returned as a data.table with columns "group" and "block" and the genes
   # pct: whether to also return percent of cells with gene expression, with cutoff given by expr.cutoff; if true will return list(avg, pct), otherwise will just return avg
   # expr.cutoff: this is the cutoff on the normalized count scale, i.e. not on log scale! For data normalized with Seurat::NormalizeData by default, the unit is UMI per 1e4 total UMIs
   # ncells.cutoff: groups (or combinations of group and block) containing < this number of cells will be discarded
+  # ret.no.t: whether to also return a version non-transformed average results if `t1` or `t2` are given, if TRUE will return as $avg.no.trans (this is for sc.dotplot)
+  # ret.grp.sizes: whether to also return the sizes of the groups after removing cells based on ncells.cutoff, if TRUE will return as a named vector as $grp.sizes (this for sc.dotplot)
 
   if (!is.null(gns)) {
     tmp <- !gns %in% rownames(mat)
@@ -1065,6 +1067,8 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   }
   if (exp) mat <- expm1(mat) else expr.cutoff <- log1p(expr.cutoff)
   grp <- mdat[[grp]]
+  grp.ss <- table(grp, useNA="ifany")
+  names(grp.ss)[is.na(names(grp.ss))] <- "NA"
   if (is.factor(grp)) {
     grps <- levels(grp)
     # if grp contains NA, it is kept as a distinct level
@@ -1077,10 +1081,11 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
 
     idxs <- lapply(grps, function(i) if (is.na(i)) is.na(grp) else grp==i)
     tmp <- sapply(idxs, sum)
-    rmv <- tmp<ncells.cutoff
+    rmv <- tmp < ncells.cutoff
     if (any(rmv)) {
       message(sprintf("These groups below contain < %d cells, they will be removed:\n%s", ncells.cutoff, paste(sprintf("%s: #cells=%d", names(tmp)[rmv], tmp[rmv]), collapse="\n")))
       idxs <- idxs[!rmv]
+      grp.ss <- grp.ss[names(tmp)[!rmv]]
     }
     if (identical(f1, mean)) {
       avg <- sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(mat[, idx, drop=FALSE], useNames=TRUE))
@@ -1090,14 +1095,18 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
       avg <- sapply(idxs, function(idx) apply(mat[, idx, drop=FALSE], 1, f1))
     }
     if (exp) avg <- log1p(avg)
-    if (identical(n2, scale)) {
-      avg <- t(scale(t(avg)))
-    } else if (!is.null(n2)) {
-      avg <- t(apply(avg, 1, n2))
+    if (!is.null(t2)) {
+      if (ret.no.t) avg1 <- avg
+      if (identical(t2, scale)) {
+        avg <- t(scale(t(avg)))
+      } else {
+        avg <- t(apply(avg, 1, t2))
+      }
     }
-    if (!pct) return(avg)
-    pct <- sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(mat[, idx, drop=FALSE]>expr.cutoff, useNames=TRUE))
-    return(list(avg=avg, pct=100*pct))
+    res <- list(avg=avg)
+    if (pct) {
+      res$pct <- 100*sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(mat[, idx, drop=FALSE]>expr.cutoff, useNames=TRUE))
+    }
 
   } else {
 
@@ -1122,7 +1131,10 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
       res
     })
     if (nrow(tmp)>0) {
-      tmp[, group:=factor(group, levels=tmp[, .(n=.N), by=group][order(-n), group])]
+      tmp1 <- tmp[, .(n=.N), by=group][order(-n), setNames(n, group)]
+      grp.ss[names(tmp1)] <- grp.ss[names(tmp1)] - tmp1
+      grp.ss <- grp.ss[grp.ss>0]
+      tmp[, group:=factor(group, levels=names(tmp1))]
       tmp <- tmp[order(group, block)]
       message(sprintf("These combinations of groups and blocks below contain < %d cells, they will be removed:\n%s", ncells.cutoff, paste(tmp[, sprintf("%s in %s: #cells=%d", group, block, n.cells)], collapse="\n")))
     }
@@ -1133,46 +1145,65 @@ summ.expr.by.grp <- function(mat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
     } else {
       avg <- lapply(idxs, function(js) sapply(js, function(j) apply(mat[, j, drop=FALSE], 1, f1)))
     }
-    if (exp && !is.null(n1)) avg <- lapply(avg, log1p)
-    if (identical(n1, scale)) {
-      avg <- lapply(avg, function(x) t(scale(t(x))))
-    } else if (!is.null(n2)) {
-      avg <- lapply(avg, function(x) t(apply(x, 1, n1)))
+    if (!is.null(t1)) {
+      if (exp) avg <- lapply(avg, log1p)
+      if (ret.no.t) avg1 <- avg
+      if (identical(t1, scale)) {
+        avg <- lapply(avg, function(x) t(scale(t(x))))
+      } else {
+        avg <- lapply(avg, function(x) t(apply(x, 1, t1)))
+      }
     }
     grps <- grps[grps %in% unq(lapply(avg, colnames))]
     if (identical(f2, mean)) {
       avg <- sapply(grps, function(j) matrixStats::rowMeans2(do.call(cbind, lapply(avg, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
+      if (exists("avg1")) avg1 <- sapply(grps, function(j) matrixStats::rowMeans2(do.call(cbind, lapply(avg1, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
     } else if (identical(f2, median)) {
       avg <- sapply(grps, function(j) matrixStats::rowMedians(do.call(cbind, lapply(avg, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
+      if (exists("avg1")) avg1 <- sapply(grps, function(j) matrixStats::rowMedians(do.call(cbind, lapply(avg1, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
     } else if (!is.null(f2)) {
       avg <- sapply(grps, function(j) apply(do.call(cbind, lapply(avg, function(x) x[, j[j %in% colnames(x)]])), 1, f2))
+      if (exists("avg1")) avg1 <- sapply(grps, function(j) apply(do.call(cbind, lapply(avg1, function(x) x[, j[j %in% colnames(x)]])), 1, f2))
     } else {
       mdat.res <- data.table(block=rep(names(avg), sapply(avg, ncol)))
       avg <- do.call(cbind, avg)
       mdat.res[, group:=colnames(avg)]
+      if (exists("avg1")) avg1 <- do.call(cbind, avg1)
     }
-    if (exp && is.null(n1)) avg <- log1p(avg)
-    if (identical(n2, scale)) {
-      avg <- t(scale(t(avg)))
-    } else if (!is.null(n2)) {
-      avg <- t(apply(avg, 1, n2))
+    if (exp && is.null(t1)) avg <- log1p(avg)
+    if (!is.null(t2)) {
+      if (ret.no.t && !exists("avg1")) avg1 <- avg
+      if (identical(t2, scale)) {
+        avg <- t(scale(t(avg)))
+      } else {
+        avg <- t(apply(avg, 1, t2))
+      }
     }
-    if (exists("mdat.res")) avg <- cbind(mdat.res, t(avg))
-    if (!pct) return(avg)
-    pct <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(mat[, j, drop=FALSE]>expr.cutoff, useNames=TRUE)))
-    if (identical(f2, mean)) {
-      pct <- sapply(grps, function(j) matrixStats::rowMeans2(do.call(cbind, lapply(pct, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
-    } else if (identical(f2, median)) {
-      pct <- sapply(grps, function(j) matrixStats::rowMedians(do.call(cbind, lapply(pct, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
-    } else if (!is.null(f2)) {
-      pct <- sapply(grps, function(j) apply(do.call(cbind, lapply(pct, function(x) x[, j[j %in% colnames(x)]])), 1, f2))
-    } else {
-      pct <- do.call(cbind, pct)
+    if (exists("mdat.res")) {
+      avg <- cbind(mdat.res, t(avg))
+      if (exists("avg1")) avg1 <- cbind(mdat.res, t(avg1))
     }
-    pct <- 100*pct
-    if (exists("mdat.res")) pct <- cbind(mdat.res, t(pct))
-    return(list(avg=avg, pct=pct))
+    res <- list(avg=avg)
+    if (pct) {
+      pct <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(mat[, j, drop=FALSE]>expr.cutoff, useNames=TRUE)))
+      if (identical(f2, mean)) {
+        pct <- sapply(grps, function(j) matrixStats::rowMeans2(do.call(cbind, lapply(pct, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
+      } else if (identical(f2, median)) {
+        pct <- sapply(grps, function(j) matrixStats::rowMedians(do.call(cbind, lapply(pct, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
+      } else if (!is.null(f2)) {
+        pct <- sapply(grps, function(j) apply(do.call(cbind, lapply(pct, function(x) x[, j[j %in% colnames(x)]])), 1, f2))
+      } else {
+        pct <- do.call(cbind, pct)
+      }
+      pct <- 100*pct
+      if (exists("mdat.res")) pct <- cbind(mdat.res, t(pct))
+      res$pct <- pct
+    }
 
   }
+
+  if (exists("avg1")) res$avg.no.trans <- avg1
+  if (ret.grp.sizes) res$grp.sizes <- grp.ss
+  if (length(res)==1) return(res[[1]]) else return(res)
 }
 

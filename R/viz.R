@@ -958,3 +958,101 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
   p
 }
 
+
+sc.dotplotly <- function(mat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=10, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, w=NULL, h=NULL, ...) {
+  # interactive dotplot with heatmaply for single-cell gene expression data
+  # mat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
+  # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
+  # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
+  # gene.anno: a named matrix of gene by annotation (gene symbols as row names, annotation names as column names); if a single annotation, provide a single-column matrix (but also possible to provide a vector, will convert it to single-column matrix with column name being "anno")
+  # grp.anno: similar to gene.anno, a named matrix of group by annotation
+  # gene.txt: a named vector of common hovertext for each gene, named by the gene symbols
+  # grp.txt: similar to gene.txt, a named vector of common hovertext for each group, named by the group levels
+  # grp.name: what the groups represent, e.g. "cluster"; this is used in the hovertext
+  # flip: by default will plot gene-by-group dot plot, if flip=TRUE will flip the X and Y axes
+
+  if (!requireNamespace(c("heatmaply", "plotly"), quietly=TRUE)) {
+    stop("Packages \"heatmaply\" and \"plotly\" needed for this function to work.")
+  }
+
+  if (is.null(n1) && is.null(n2) && std) {
+    if (is.null(blk)) n2 <- scale else n1 <- scale
+  }
+  tmp <- summ.expr.by.grp(mat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
+  avg <- tmp$avg
+  #avg[is.na(avg)] <- 0
+  pct <- tmp$pct
+  grp.ss <- tmp$grp.sizes
+  gns <- rownames(avg)
+  if (!is.null(n1) || !is.null(n2)) txt.mat <- sprintf("log expr: %.3g\n", tmp$avg.no.trans) else txt.mat <- ""
+  txt.mat <- paste0(txt.mat, sprintf("%s size: %d\n", grp.name, rep(grp.ss[colnames(avg)], each=nrow(avg))))
+  if (!is.null(gene.txt)) txt.mat <- paste0(txt.mat, paste0(rep(gene.txt[gns], ncol(avg)), "\n"))
+  if (!is.null(grp.txt)) txt.mat <- paste0(txt.mat, paste0(rep(grp.txt[colnames(avg)], each=nrow(avg)), "\n"))
+  dim(txt.mat) <- dim(avg)
+  if (flip) {
+    avg <- t(avg)
+    pct <- t(pct)
+    txt.mat <- t(txt.mat)
+  }
+  nr <- nrow(avg)
+  nch.r <- max(nchar(rownames(avg)), na.rm=TRUE)
+  nc <- ncol(avg)
+  nch.c <- max(nchar(colnames(avg)), na.rm=TRUE)
+  if (std) f.color <- ggplot2::scale_color_gradient2(low="deepskyblue3", mid="grey90", high="indianred3", midpoint=0) else f.color <- ggplot2::scale_color_gradient(low="grey90", high="deepskyblue3") # for dot plot, need to use scale_color rather than scale_fill (the latter for normal heatmap)
+  args <- list(
+    x=avg,
+    node_type="scatter",
+    point_size_mat=pct,
+    label_names=c("gene", grp.name, ifelse(std, "std expr", "log expr")),
+    label_format_fun=function(...) sprintf("%.3g", ...),
+    point_size_name="% expr",
+    custom_hovertext=txt.mat,
+    scale_fill_gradient_fun=f.color,
+    ...
+  )
+  if (flip) args$ylab <- xlab else args$xlab <- xlab
+  if (!"column_text_angle" %in% names(args)) args$column_text_angle <- 40
+  if (!"grid_size" %in% names(args)) args$grid_size <- 0.05
+  if (!"branches_lwd" %in% names(args)) args$branches_lwd <- 0.3
+  if (!is.null(gene.anno)) {
+    if (is.null(dim(gene.anno))) gene.anno <- cbind(anno=gene.anno)
+    if (flip) {
+      args$col_side_colors <- gene.anno[match(gns, rownames(gene.anno)), , drop=FALSE]
+      args$col_side_colors[is.na(args$col_side_colors)] <- "NA"
+      args$col_side_palette <- colorspace::rainbow_hcl
+    } else {
+      args$row_side_colors <- gene.anno[match(gns, rownames(gene.anno)), , drop=FALSE]
+      args$row_side_colors[is.na(args$row_side_colors)] <- "NA"
+      args$row_side_palette <- colorspace::rainbow_hcl
+    }
+  }
+  if (!is.null(grp.anno)) {
+    if (is.null(dim(grp.anno))) grp.anno <- cbind(anno=grp.anno)
+    if (flip) {
+      args$row_side_colors <- grp.anno[match(rownames(avg), rownames(grp.anno)), , drop=FALSE]
+      args$row_side_palette <- colorspace::rainbow_hcl
+    } else {
+      args$col_side_colors <- grp.anno[match(colnames(avg), rownames(grp.anno)), , drop=FALSE]
+      args$col_side_palette <- colorspace::rainbow_hcl
+    }
+  }
+  if (flip) {
+    if (!is.null(grp.anno)) nc1 <- ncol(grp.anno) else nc1 <- 0
+    if (!is.null(gene.anno)) nr1 <- ncol(gene.anno) else nr1 <- 0
+  } else {
+    if (!is.null(gene.anno)) nc1 <- ncol(gene.anno) else nc1 <- 0
+    if (!is.null(grp.anno)) nr1 <- ncol(grp.anno) else nr1 <- 0
+  }
+  if (!"subplot_widths" %in% names(args)) {
+    args$subplot_widths <- c(nc/(nc+0.7*nc1+1), 0.7*nc1/(nc+0.7*nc1+1), 1/(nc+0.7*nc1+1))
+    args$subplot_widths <- args$subplot_widths[args$subplot_widths!=0]
+  }
+  if (!"subplot_heights" %in% names(args)) {
+    args$subplot_heights <- c(1.5/(nr+nr1+1.5), nr1/(nr+nr1+1.5), nr/(nr+nr1+1.5))
+    args$subplot_heights <- args$subplot_heights[args$subplot_heights!=0]
+  }
+  if (is.null(w)) w <- 50*(nc+0.7*nc1+1)+10*nch.r+150
+  if (is.null(h)) h <- 27*(nr+nr1+1.5)+10*nch.c+50
+
+  do.call(heatmaply::heatmaply, args) %>% plotly::layout(autosize=FALSE, width=w, height=h)
+}
