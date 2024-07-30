@@ -28,7 +28,10 @@ Depends:
     gtable,
     latex2exp,
     RColorBrewer,
-    colorspace
+    scales,
+    colorspace,
+    circlize,
+    ComplexHeatmap
 Imports:
     Matrix,
     sparseMatrixStats,

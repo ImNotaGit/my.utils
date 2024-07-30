@@ -49,11 +49,12 @@ hh <- function(x, nr=5, nc=nr) {
 }
 
 
-dt2mat <- function(x, rn=1, rm=1) {
+dt2mat <- function(x, rn=1, rm=1, data=TRUE) {
   # convert a data.table to matrix, using the rn column as rownames, and remove columns as specified by rm
   # rn and rm can be indices or column names
+  if (!is.data.table(x)) x <- as.data.table(x)
   rns <- x[[rn]]
-  res <- data.matrix(x[, -rm, with=FALSE])
+  if (data) res <- data.matrix(x[, -rm, with=FALSE]) else res <- as.matrix(x[, -rm, with=FALSE])
   rownames(res) <- rns
   res
 }

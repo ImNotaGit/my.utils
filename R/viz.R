@@ -1,16 +1,18 @@
 ## ----functions for quick data exploration and visualization----
 
 
-my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE) {
+my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE, mute=FALSE, l=50, c=100) {
   # my custom list of easily distinguishable colors for categorical variables with potentially many levels
   # note: order not optimized yet
   # x: if missing, will return all available colors; or a single number n, return n colors from top of the list;
+  #    or a factor, return as many colors from top of the list and named by the levels of the factor in order;
   #    or a vector, if the vector contains no duplicates, return as many colors from top of the list and named by the vector elements in order;
   #    if the vector contains duplicates, will give colors for sort(table(x), dec=T)
   # dup.last: if not enough colors, whether to duplicate the last color or throw an error
   # na.rm: if x is a vector, whether to exclude NA (if any); when including NA, it will be placed last
   # na.color: if NULL and na.rm=FALSE, will use a color in the list for NA; if not NULL, then specify the color for NA (and will automatically assume na.rm=FALSE)
   # no.grey: exclude grey-ish colors from the list to choose from
+  # mute: if true will "dampen" the colors with scales::muted, l and c are passed to muted
 
   if (no.grey) {
     # this is to avoid confusion with NA, which is by default colored grey
@@ -33,11 +35,12 @@ my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE)
     res <- get.n.cols(x)
   } else {
     any.na <- anyNA(x)
-    if (any(duplicated(x))) x <- names(sort(table(x), decreasing=TRUE))
+    if (is.factor(x)) x <- levels(x) else if (any(duplicated(x))) x <- names(sort(table(x), decreasing=TRUE)) else x <- x[!is.na(x)]
     if (!na.rm && is.null(na.color) && any.na) x <- c(x, NA)
     res <- cn1(get.n.cols(length(x)), x)
     if (!is.null(na.color) && any.na) res <- c(res, cn1(na.color, NA))
   }
+  if (mute) res <- scales::muted(res, l=l, c=c)
   res
 }
 
@@ -572,21 +575,21 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   lgd.box <- match.arg(lgd.box)
 
   f <- function(x, u=NULL) {
-  	if (is.null(x) || length(x)==0) {
-  	  element_blank()
-  	} else if (is.numeric(x)) {
-  	  if (is.null(u)) element_text(size=x) else unit(x, u)
-  	} else if (is.list(x)) {
-  	  do.call(element_text, x)
-  	} else if (length(x)==1 && is.na(x)) {
-  	  NULL
-  	} else x
+    if (is.null(x) || length(x)==0) {
+      element_blank()
+    } else if (is.numeric(x)) {
+      if (is.null(u)) element_text(size=x) else unit(x, u)
+    } else if (is.list(x)) {
+      do.call(element_text, x)
+    } else if (length(x)==1 && is.na(x)) {
+      NULL
+    } else x
   }
 
   pars <- list(
-  	axis.title.x=f(x.tit),
-  	axis.text.x=f(x.txt),
-  	axis.title.y=f(y.tit),
+    axis.title.x=f(x.tit),
+    axis.text.x=f(x.txt),
+    axis.title.y=f(y.tit),
     axis.text.y=f(y.txt),
     plot.title=f(tit),
     strip.text=f(face),
@@ -959,17 +962,17 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
 }
 
 
-sc.dotplotly <- function(mat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=10, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, w=NULL, h=NULL, ...) {
+sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, w=NULL, h=NULL, ...) {
   # interactive dotplot with heatmaply for single-cell gene expression data
-  # mat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
+  # dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
   # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
   # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
-  # gene.anno: a named matrix of gene by annotation (gene symbols as row names, annotation names as column names); if a single annotation, provide a single-column matrix (but also possible to provide a vector, will convert it to single-column matrix with column name being "anno")
-  # grp.anno: similar to gene.anno, a named matrix of group by annotation
+  # gene.anno: data.frame or data.table, first column should contain gene symbols/names, each subsequent column is a variable used to annotate the genes
+  # grp.anno: similar to gene.anno, annotation for the groups
   # gene.txt: a named vector of common hovertext for each gene, named by the gene symbols
   # grp.txt: similar to gene.txt, a named vector of common hovertext for each group, named by the group levels
   # grp.name: what the groups represent, e.g. "cluster"; this is used in the hovertext
-  # flip: by default will plot gene-by-group dot plot, if flip=TRUE will flip the X and Y axes
+  # flip: by default will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE will flip the X and Y axes (and xlab will become ylab)
 
   if (!requireNamespace(c("heatmaply", "plotly"), quietly=TRUE)) {
     stop("Packages \"heatmaply\" and \"plotly\" needed for this function to work.")
@@ -978,7 +981,7 @@ sc.dotplotly <- function(mat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   if (is.null(n1) && is.null(n2) && std) {
     if (is.null(blk)) n2 <- scale else n1 <- scale
   }
-  tmp <- summ.expr.by.grp(mat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
+  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
   avg <- tmp$avg
   #avg[is.na(avg)] <- 0
   pct <- tmp$pct
@@ -1015,6 +1018,7 @@ sc.dotplotly <- function(mat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   if (!"grid_size" %in% names(args)) args$grid_size <- 0.05
   if (!"branches_lwd" %in% names(args)) args$branches_lwd <- 0.3
   if (!is.null(gene.anno)) {
+    gene.anno <- dt2mat(gene.anno, data=FALSE)
     if (is.null(dim(gene.anno))) gene.anno <- cbind(anno=gene.anno)
     if (flip) {
       args$col_side_colors <- gene.anno[match(gns, rownames(gene.anno)), , drop=FALSE]
@@ -1027,7 +1031,7 @@ sc.dotplotly <- function(mat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
     }
   }
   if (!is.null(grp.anno)) {
-    if (is.null(dim(grp.anno))) grp.anno <- cbind(anno=grp.anno)
+    grp.anno <- dt2mat(grp.anno, data=FALSE)
     if (flip) {
       args$row_side_colors <- grp.anno[match(rownames(avg), rownames(grp.anno)), , drop=FALSE]
       args$row_side_palette <- colorspace::rainbow_hcl
@@ -1056,3 +1060,423 @@ sc.dotplotly <- function(mat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
 
   do.call(heatmaply::heatmaply, args) %>% plotly::layout(autosize=FALSE, width=w, height=h)
 }
+
+
+#####  functions and helper functions for heatmap plotting with ComplexHeatmap #####
+
+.xcut <- function(x, ys, x.seps="s", from0=FALSE, sym=FALSE, m3d=TRUE, ys.m3d=NULL, trans=NULL) {
+  # helper function to map values in x to a scale of y values given in `ys`; x is a numeric vector or matrix, ys is a vector representing the scale
+  # length(ys) should be >=2, the first and last values are mapped to min(x) and max(x) if m3d=FALSE, otherwise to median(x)+-3*mad(x); the "internal" values of `ys` are mapped to x values given in `x.seps`
+  # x.seps can also be "q", in which case quantiles of x will be mapped to `ys`, or "s" in which case equally spaced cut points from min-max or median+-3mad will be mapped to `ys`
+  # trans: a function to transform x and x.seps as a first step before mapping
+  # from0: if TRUE then all x (after transformation) should >=0
+  # sym: whether the result mapping should be made symmetric, only effective if from0=FALSE and the length of ys is an odd number
+  # ys.m3d: only effective if m3d=TRUE, the y scale values used for out-of-m3d range x values
+
+  if (is.numeric(x.seps) && length(x.seps)!=length(ys)-2) stop("`x.seps` should have a length of length(ys)-2.")
+  q <- is.character(x.seps) && x.seps=="q"
+  if (!is.null(trans)) {
+    if (!is.function(trans)) stop("`trans` should be a function.")
+    x <- trans(x)
+    if (is.numeric(x.seps)) x.sep <- trans(x.seps)
+  }
+  if (from0 && any(x<0)) stop("`from0` is true but the data contains negative values.")
+  x1 <- x[is.finite(x)] # will remove na's as well
+  ma <- max(x1)
+  mi <- min(x1)
+  if (m3d) {
+    m <- median(x1)
+    d3 <- 3*mad(x1)
+    hi <- m+d3
+    lo <- m-d3
+    if (hi>ma) hi <- ma else hi <- max(x1[x1<hi])
+    if (lo<mi) lo <- mi else lo <- min(x1[x1>lo])
+    if (from0) {
+      if (q) xs <- c(quantile(c(0,x1[x1<=hi]), seq(0, 1, len=length(ys))), ma) else xs <- c(seq(0, hi, len=length(ys)), ma)
+      if (!is.null(ys.m3d)) ys <- c(ys, ys.m3d) else ys <- c(ys, ys[length(ys)])
+    } else {
+      if (q) xs <- c(mi, quantile(x1[x1>=lo & x1<=hi], seq(0, 1, len=length(ys))), ma) else xs <- c(mi, seq(lo, hi, len=length(ys)), ma)
+      if (!is.null(ys.m3d)) {
+        if (length(ys.m3d)!=2) stop("`ys.m3d` should have a length of 2.")
+        ys <- c(ys.m3d[1], ys, ys.m3d[2])
+      } else ys <- c(ys[1], ys, ys[length(ys)])
+    }
+  } else {
+    if (q) xs <- quantile(x1, seq(0, 1, len=length(ys))) else xs <- seq(mi, ma, len=length(ys))
+    if (from0) xs[1] <- 0
+  }
+  if (is.numeric(x.seps)) {
+    rng <- xs[c(1, length(xs))]
+    if (m3d) {
+      if (from0) xs[2:(length(xs)-2)] <- x.seps else xs[3:(length(xs)-2)] <- x.seps
+    } else xs[2:(length(xs)-1)] <- x.seps
+    xs <- sort(xs)
+    idx <- xs<rng[1] | xs>rng[2]
+    if (any(idx)) {
+      xs <- xs[!idx]
+      ys <- ys[!idx]
+    }
+    if (!from0 && sym && length(xs)%%2==1) {
+      i <- length(xs) %/% 2
+      mid <- xs[i+1]
+      if ((mid-xs[1])<(xs[length(xs)]-mid)) xs[1:i] <- 2*mid-xs[length(xs):(i+2)] else xs[(i+2):length(xs)] <- 2*mid-xs[i:1]
+    }
+  }
+  if (xs[1]==xs[2]) {
+    xs <- xs[-1]
+    ys <- ys[-1]
+  }
+  if (xs[length(xs)]==xs[length(xs)-1]) {
+    xs <- xs[-length(xs)]
+    ys <- ys[-length(ys)]
+  }
+  list(x=xs, y=ys)
+}
+
+.fcolor <- function(x, cols, pal=1, x.seps="s", from0=FALSE, sym=FALSE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, ...) {
+  # helper function to map values in x to a color scale in `cols`; x is a numeric vector or matrix, cols is a vector representing the scale
+  # if length(cols)==1, then cols can be 2 or 3 corresponding to preset colors (2 is based on 2 colors, and 3 is based on 3 colors for bi-directional data with mid point 0)
+  # pal: 1 or 2, preset palette for when cols=2 or 3, otherwise will be ignored
+  # other arguments passed to .xcut; ... passed to circlize::colorRamp2
+
+  args <- list(...)
+  if (length(cols)==1) {
+    if (cols==2) {
+      if (from0) {
+        if (pal==1) cols <- c("grey90", "red2") else cols <- c("grey90", "indianred3")
+        if (m3d) cols.m3d <- "darkred"
+      } else {
+        if (pal==1) cols <- c("blue2", "orange") else cols <- c("dodgerblue4", "goldenrod1")
+        if (m3d) {
+          if (pal==1) cols.m3d <- c("darkblue", "yellow") else cols.m3d <- c("midnightblue", "yellow")
+        }
+      }
+    } else if (cols==3) {
+      x.seps <- 0
+      from0 <- FALSE
+      sym <- TRUE
+      if (pal==1) cols <- c("blue2", "grey90", "red2") else cols <- c("deepskyblue3", "grey90", "indianred3")
+      if (m3d) {
+        if (pal==1) cols.m3d <- c("darkblue", "darkred") else cols.m3d <- c("royalblue4", "darkred")
+      }
+    }
+  }
+  m <- .xcut(x, cols, x.seps, from0, sym, m3d, cols.m3d, trans)
+  if (uniqueN(m$x)==1) {
+    # the results need to be a function similar to that returned by circlize::colorRamp2
+    f <- function(i) {
+      res <- rep(colorRampPalette(m$y)(3)[2], length(i))
+      res[is.na(i)] <- na.col
+      res
+    }
+    attr(f, "breaks") <- m$x[1]*c(0.99, 1, 1.01)
+    attr(f, "colors") <- rep(colorRampPalette(m$y)(3)[2], 3)
+  } else {
+    # instead of directly return the function generated by circlize::colorRamp2, need to handle trans and NA (for some reason the na_col in Heatmap does not work?)
+    f <- function(i) {
+      f1 <- circlize::colorRamp2(m$x, m$y, ...)
+      if (is.null(trans)) res <- f1(i) else res <- f1(trans(i))
+      res[is.na(i)] <- na.col
+      res
+    }
+    attr(f, "breaks") <- m$x
+    attr(f, "colors") <- m$y
+  }
+  attr(f, "transparency") <- if ("transparency" %in% names(args)) args$transparency else 0
+  attr(f, "space") <- if ("space" %in% names(args)) args$space else "LAB"
+  f
+}
+
+.fcolor1 <- function(x, cols=NULL, mute=FALSE, ...) {
+  # helper function to generate colors for a vector x
+  if (is.numeric(x)) {
+    if (is.null(cols)) {
+      if (any(x>0) && any(x<0)) .fcolor(x, cols=3, ...) else .fcolor(x, cols=2, ...)
+    } else .fcolor(x, cols, ...)
+  } else {
+    # unlike na_col in Heatmap, na_col does work in HeatmapAnnotation so handling NA here is unnecessary, but I keep it anyway
+    res <- my.cols(x, na.color="white", mute=mute)
+    names(res)[is.na(names(res))] <- "NA" # need to do this otherwise HeatmapAnnotation will give error
+    res
+  }
+}
+
+.fsize <- function(mat, sizes=c(0.1, 0.55), x.seps="s", from0=TRUE, sym=FALSE, m3d=FALSE, sizes.m3d=NULL, trans=NULL) {
+  # helper function to map values in mat to a scale of dot sizes (radius) for ComplexHeatmap; mat is a numeric matrix, sizes is a vector representing the scale
+  m <- .xcut(mat, sizes, x.seps, from0, sym, m3d, sizes.m3d, trans)
+  xs <- m$x
+  sizes <- m$y
+  if (!is.null(trans)) mat <- trans(mat)
+
+  function(i=NULL, j=NULL, x=NULL) {
+    if (is.null(x)) x <- mat[i, j] else if (!is.null(trans)) x <- trans(x)
+    if (xs[1]==xs[length(xs)]) {
+      if (is.infinite(x) && x>0) {
+        s <- sizes[length(sizes)]
+      } else if (is.infinite(x) && x<0) {
+        s <- sizes[1]
+      } else s <- (sizes[1] + sizes[length(sizes)])/2
+    } else s <- approx(xs, sizes, x, rule=2, ties="ordered")$y
+    if (is.na(s)) NA else s*unit(3, "mm")
+  }
+}
+
+plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL, y.anno=NULL, name=" ", sname=" ", cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, ...) {
+  # plot heatmap (or dot plot) with ComplexHeatmap
+  # mat: for heatmap color; smat: for dot size, if provided will do dot plot; will assume that mat and smat have the same dimensions and row/column orders
+  # sp: if TRUE, will assume that smat contains adjusted P values; can provide significance cutoff in s.seps, e.g. s.seps=0.05
+  # name and sname are legend labels for mat and smat respectively
+  # x.anno and y.anno: data.frame or data.table, first column should contain IDs (i.e. col/rownames of mat), each subsequent column is a variable used to annotate the columns/rows
+  # cols to trans passed to .fcolor for heatmap color
+  # sizes to s.trans passed to .fsize for dot size
+  # colf.anno: a function for generating annotation colors
+  # cellf: pass a custom cellf replacing that defined in this function, the env of cellf will be changed to the runtime env of this function, so can refer to mat, smat, rf, colf, etc.
+  # clust: if to cluster neither columns nor rows, set to ""
+
+  lgd.pos <- match.arg(lgd.pos)
+  lgd.ori <- match.arg(lgd.ori)
+  anno.lgd.pos <- match.arg(anno.lgd.pos)
+  anno.lgd.ori <- match.arg(anno.lgd.ori)
+  pack.lgd <- match.arg(pack.lgd)
+  if (is.null(merge.lgd)) merge.lgd <- lgd.pos==anno.lgd.pos
+  if (lgd.ori=="default") lgd.ori <- switch(lgd.pos, b="horizontal", r="vertical") else lgd.ori <- switch(lgd.ori, h="horizontal", v="vertical")
+  if (anno.lgd.ori=="default") anno.lgd.ori <- switch(anno.lgd.pos, b="horizontal", r="vertical") else anno.lgd.ori <- switch(anno.lgd.ori, h="horizontal", v="vertical")
+  lgd.key.nr <- switch(anno.lgd.pos, b=NULL, r=lgd.key.nmax)
+  lgd.key.nc <- switch(anno.lgd.pos, b=lgd.key.nmax, r=NULL)
+  pos.map <- c(t="top", r="right", b="bottom", l="left")
+  lgd.pos <- pos.map[lgd.pos]
+  anno.lgd.pos <- pos.map[anno.lgd.pos]
+
+  colf <- .fcolor(mat, cols, pal, seps, from0, sym, m3d, cols.m3d, na.col, trans)
+
+  if (!is.null(smat)) {
+    if (sp) {
+      smat[smat<2.2e-16] <- 2.2e-16
+      smat <- -log10(smat)
+      if (sname==" ") sname <- expression(P[adj])
+      if (is.character(s.seps)) {
+        p.cut <- 0.05
+        s.seps <- -log10(0.05)
+        sizes <- c(0.1, 0.2, 0.55)
+      } else {
+        p.cut <- s.seps[1]
+        s.seps <- -log10(s.seps)
+        if (length(sizes)==2) sizes <- c(0.1, 0.2, 0.55)
+      }
+    }
+    rf <- .fsize(smat, sizes, s.seps, from0=TRUE, sym=FALSE, m3d=FALSE, sizes.m3d, trans=NULL)
+    if (is.null(cellf)) {
+      if (sp) {
+        cellf <- function(j, i, x, y, width, height, fill) {
+          grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col=NA, fill=NA))
+          grid.circle(x=x, y=y, r=rf(i, j), gp=gpar(fill=colf(mat[i, j]), col=if (smat[i, j]>s.seps[1]) "black" else NA))
+        }
+      } else {
+        cellf <- function(j, i, x, y, width, height, fill) {
+          grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col=NA, fill=NA))
+          grid.circle(x=x, y=y, r=rf(i, j), gp=gpar(fill=colf(mat[i, j]), col=NA))
+        }
+      }
+    } else {
+      environment(cellf) <- environment()
+    }
+  } else cellf <- NULL
+
+  # temporary workaround for clustering involving Inf
+  mat1 <- mat
+  if (clust!="" && any(is.infinite(mat))) {
+    if (any(is.infinite(mat[mat>0]))) {
+      tmp <- 10*max(mat[is.finite(mat)])
+      if (tmp==0) tmp <- 10*max(abs(mat[is.finite(mat)]))
+      if (tmp==0) tmp <- 1
+      mat1[is.infinite(mat) & mat>0] <- tmp
+    }
+    if (any(is.infinite(mat[mat<0]))) {
+      tmp <- 10*min(mat[is.finite(mat)])
+      if (tmp==0) tmp <- 10*max(abs(mat[is.finite(mat)]))
+      if (tmp==0) tmp <- -1
+      mat1[is.infinite(mat) & mat<0] <- tmp
+    }
+  }
+
+  if (!is.null(y.anno)) {
+    y.anno <- y.anno[match(rownames(mat), y.anno[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
+    row.cols <- lapply(y.anno, colf.anno)
+    row.ha <- HeatmapAnnotation(
+      which="row", df=y.anno, col=row.cols, na_col="white",
+      simple_anno_size=unit(2.5,"mm"), gap=unit(2,"points"),
+      show_annotation_name=TRUE, annotation_name_side=if (is.null(x.anno)) "bottom" else "top", annotation_name_gp=gpar(fontsize=9, fontface="plain", srt=40), annotation_name_rot=40,
+      annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"))
+    )
+  } else row.ha <- NULL
+
+  if (!is.null(x.anno)) {
+    x.anno <- x.anno[match(colnames(mat), x.anno[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
+    col.cols <- lapply(x.anno, colf.anno)
+    col.ha <- HeatmapAnnotation(
+      which="column", df=x.anno, col=col.cols, na_col="white",
+      simple_anno_size=unit(2.5,"mm"), gap=unit(2,"points"),
+      show_annotation_name=TRUE, annotation_name_side="left", annotation_name_gp=gpar(fontsize=9, fontface="plain"),
+      annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"))
+    )
+  } else col.ha <- NULL
+
+  hm <- Heatmap(mat1,
+    col=colf,
+    na_col="grey50",
+    name=name,
+    width=ncol(mat)*unit(if (any(grepl("\n", colnames(mat)))) 7 else 5, "mm"),
+    height=nrow(mat)*unit(5, "mm"),
+    row_title=ylab,
+    row_title_gp=gpar(fontsize=10),
+    row_title_side=pos.map[str_extract(lab.pos, "[lr]")],
+    row_names_gp=gpar(fontsize=9),
+    row_names_side=pos.map[str_extract(lab.pos, "[lr]")],
+    cluster_rows=grepl("y", clust),
+    row_dend_side=if (grepl("y", clust)) pos.map[str_extract(dend.pos, "[lr]")] else "left",
+    row_dend_width=unit(7, "mm"),
+    row_dend_gp=gpar(lwd=0.2),
+    column_title=xlab,
+    column_title_gp=gpar(fontsize=10),
+    column_title_side=pos.map[str_extract(lab.pos, "[tb]")],
+    column_names_gp=gpar(fontsize=9),
+    column_names_side=pos.map[str_extract(lab.pos, "[tb]")],
+    column_names_rot=40,
+    cluster_columns=grepl("x", clust),
+    column_dend_side=if (grepl("x", clust)) pos.map[str_extract(dend.pos, "[tb]")] else "top",
+    column_dend_height=unit(7, "mm"),
+    column_dend_gp=gpar(lwd=0.2),
+    border=TRUE,
+    border_gp=gpar(lwd=0.2),
+    rect_gp=if (is.null(smat)) gpar(col=NA) else gpar(type="none"),
+    cell_fun=cellf,
+    left_annotation=if (grepl("l", anno.pos)) row.ha else NULL,
+    right_annotation=if (grepl("r", anno.pos)) row.ha else NULL,
+    top_annotation=if (grepl("t", anno.pos)) col.ha else NULL,
+    bottom_annotation=if (grepl("b", anno.pos)) col.ha else NULL,
+    show_heatmap_legend=is.null(smat),
+    heatmap_legend_param=list(direction=lgd.ori, grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"))
+  )
+
+  if (!is.null(smat)) {
+    if (pack.lgd=="default") pack.lgd <- switch(lgd.pos, bottom="horizontal", right="vertical") else pack.lgd <- switch(pack.lgd, h="horizontal", v="vertical")
+    lgd.c <- Legend(col_fun=colf, title=name, title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"), direction=lgd.ori)
+    if (sp) {
+      tmp <- seq(0, max(smat, na.rm=TRUE), len=4)[-1]
+      if (all(tmp<s.seps[1])) lbs <- tmp else if (all(tmp>=s.seps[1])) lbs <- c(-log10(0.2), tmp) else lbs <- sort(c(s.seps, tmp))
+      grs <- lapply(lbs, function(i) function(x, y, w, h) grid.circle(x, y, r=rf(x=i), gp=gpar(fill="grey", col=if (i>=s.seps[1]) "black" else NA)))
+      lbs <- ifelse(lbs==s.seps[1], paste0("<", p.cut), ifelse(lbs==-log10(0.2), paste0(">", p.cut), ifelse(lbs==-log10(2.2e-16), "<2.2e-16", sprintf("%.1g", 10^(-lbs)))))
+      tmp <- !duplicated(lbs)
+      lbs <- lbs[tmp]
+      grs <- grs[tmp]
+    } else {
+      if (is.character(s.seps)) {
+        if (s.seps=="s") {
+          if (s.from0) lbs <- seq(0, max(smat[is.finite(smat)]), len=4) else lbs <- seq(min(smat[is.finite(smat)]), max(smat[is.finite(smat)]), len=4)
+        } else {
+          lbs <- quantile(smat[is.finite(smat)], seq(0, 1, len=4))
+          if (s.from0) lbs[1] <- 0
+        }
+      } else {
+        if (s.from0) lbs <- c(0, s.seps, max(smat[is.finite(smat)])) else lbs <- c(min(smat[is.finite(smat)]), s.seps, max(smat[is.finite(smat)]))
+      }
+      lbs <- unique(lbs)
+      grs <- lapply(lbs, function(i) function(x, y, w, h) grid.circle(x, y, r=rf(x=i), gp=gpar(fill="grey", col=NA)))
+      lbs <- sprintf("%.1f", lbs)
+    }
+    lgd.s <- Legend(title=sname, title_gp=gpar(fontsize=9, fontface="plain"), labels=lbs, labels_gp=gpar(fontsize=8, fontface="plain"), graphics=grs, nrow=switch(lgd.ori, horizontal=1, vertical=NULL), ncol=switch(lgd.ori, horizontal=NULL, vertical=1), by_row=lgd.ori=="horizontal", direction=lgd.ori)
+    lgd <- packLegend(lgd.c, lgd.s, direction=pack.lgd)
+    draw(hm, column_title=NULL, heatmap_legend_side=anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
+  } else draw(hm, heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=anno.lgd.pos, legend_grouping="original")
+}
+
+
+sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab="Cluster", flip=FALSE, cols=NULL, pal=1, m3d=FALSE, ...) {
+  # dotplot with ComplexHeatmap for single-cell gene expression data
+  # dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
+  # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
+  # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
+  # gene.anno: a data.frame or data.table of gene annotation, first column should contain gene symbols/names
+  # grp.anno: similar to gene.anno, group annotation, first column should contain group names
+  # markers: a list of marker gene annotation, e.g. list(CD8T=c("CD8A", "CD8B")), if provided will add to gene.anno
+  # flag: if TRUE and `markers` is provided, will highlight the cases where the gene expression in a group is not as expected (either unexpected high expression or unexpected low expression)
+  # grp.map: a named vector mapping each group name (in grp) to the class (e.g. cell type) name of `markers` (i.e. names(markers)); if NULL, will assume that the group names already match names(markers)
+  # markers.wl: a list of whitelist markers to avoid flagging, e.g. list(B="CD4"), these markers are allowed to be expressed in the corresponding classes/cell types; will be ignored unless flag=TRUE
+  # flip: by default will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE will flip the X and Y axes (and xlab will become ylab)
+  # ...: passed to plot.hm
+
+  if (is.null(n1) && is.null(n2) && std) {
+    if (is.null(blk)) n2 <- scale else n1 <- scale
+  }
+  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
+  avg <- tmp$avg
+  pct <- tmp$pct
+  # add group sizes (cell numbers) to group names
+  grps <- colnames(avg)
+  grps <- setNames(sprintf("%s (n=%d)", grps, tmp$grp.sizes[grps]), grps)
+  colnames(avg) <- colnames(pct) <- grps
+  if (!is.null(grp.anno)) grp.anno[[1]] <- grps[grp.anno[[1]]]
+  # markers
+  cellf <- NULL
+  if (!is.null(markers)) {
+    tmp <- rbindlist(lapply(markers, function(x) data.table(gene=x)), idcol="class")
+    tmp <- tmp[, .(`marker of`=paste(sort(unique(class)), collapse=",")), by=gene]
+    if (!is.null(gene.anno)) {
+      names(gene.anno)[1] <- "gene"
+      gene.anno <- merge(gene.anno, tmp, by="gene", all=TRUE)
+    } else gene.anno <- tmp[, .(gene, `marker of`)]
+
+    if (flag) {
+      cutoffs <- apply(avg, 1, function(x) {
+        x <- x[!is.na(x)]
+        if (length(x)<2) return(c(lo=Inf, hi=-Inf))
+        km <- kmeans(x, 2, nstart=5)
+        hi <- min(x[km$cluster==which.max(km$centers)])
+        lo <- max(x[km$cluster==which.min(km$centers)])
+        c(lo=lo, hi=hi)
+      })
+      gns <- rownames(avg)
+      if (is.null(grp.map)) grp.map <- setNames(names(grps), names(grps))
+      fmat <- sapply(setNames(names(grps), grps), function(g) {
+        x <- setNames(rep(0, length(gns)), gns)
+        ct <- grp.map[g]
+        if (!ct %in% names(markers)) return(x)
+        hi.exp <- gns %in% markers[[ct]]
+        lo.obs <- avg[, grps[g]]<cutoffs["hi",]
+        x[hi.exp & lo.obs] <- 1
+        lo.exp <- gns %in% setdiff(unlist(markers[names(markers)!=ct]), markers.wl[[ct]])
+        hi.obs <- avg[, grps[g]]>cutoffs["lo",]
+        x[lo.exp & hi.obs] <- -1
+        x
+      })
+      if (flip) fmat <- t(fmat)
+      assign(".tmp.cellf.env", new.env(), envir=.GlobalEnv)
+      .tmp.cellf.env$fmat <- fmat
+      on.exit(rm(.tmp.cellf.env, envir=.GlobalEnv))
+      cellf <- function(j, i, x, y, width, height, fill) {
+        fmat <- .tmp.cellf.env$fmat
+        grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col=NA, fill=NA))
+        grid.circle(x=x, y=y, r=rf(i, j), gp=gpar(fill=colf(mat[i, j]), col=if (fmat[i, j]==1) "red2" else if (fmat[i, j]==-1) "blue2" else NA))
+      }
+    }
+  }
+
+  if (flip) {
+    avg <- t(avg)
+    pct <- t(pct)
+    x.anno <- gene.anno
+    y.anno <- grp.anno
+    ylab <- xlab
+    xlab <- NULL
+  } else {
+    x.anno <- grp.anno
+    y.anno <- gene.anno
+    ylab <- NULL
+  }
+  if (is.null(cols)) {
+    if (std) cols <- 3 else cols <- 2
+  }
+
+  plot.hm(avg, pct, sp=FALSE, xlab, ylab, x.anno, y.anno, name=ifelse(std, "std expr", "log expr"), sname="% expr", cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
+}
+
