@@ -1040,7 +1040,7 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
 }
 
 
-summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=mean, t1=scale, f2=mean, t2=NULL, pct=TRUE, expr.cutoff=0, ncells.cutoff=10, ret.no.t=FALSE, ret.grp.sizes=FALSE) {
+summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=mean, t1=scale, f2=mean, t2=NULL, pct=TRUE, expr.cutoff=0, ncells.cutoff=3, ret.no.t=FALSE, ret.grp.sizes=FALSE, ret.rmv.summ=FALSE) {
   # summarize (single-cell) gene expression by group, i.e. get the average (or other location statistics) by group (potentially with additional blocking/stratification), and optionally get the percent of cells with expression
   # this may be used for other similar summarization tasks as well.
   # dat: gene-by-cell matrix, assuming log-normalized; sparse and non-sparse both work (sparseMatrixStats functions also works for non-sparse matrices); or could be a Seurat object
@@ -1058,7 +1058,8 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   # expr.cutoff: this is the cutoff on the normalized count scale, i.e. not on log scale! For data normalized with Seurat::NormalizeData by default, the unit is UMI per 1e4 total UMIs
   # ncells.cutoff: groups (or combinations of group and block) containing < this number of cells will be discarded
   # ret.no.t: whether to also return a version non-transformed average results if `t1` or `t2` are given, if TRUE will return as $avg.no.trans (this is for sc.dotplot)
-  # ret.grp.sizes: whether to also return the sizes of the groups after removing cells based on ncells.cutoff, if TRUE will return as a named vector as $grp.sizes (this for sc.dotplot)
+  # ret.grp.sizes: whether to also return the sizes of the groups after removing cells based on ncells.cutoff, if TRUE will return as a named vector as $grp.ncells and $grp.nblks if blk is given (this for sc.dotplot)
+  # ret.rmv.summ: whether to also return a summary of the removed groups and blocks due to ncells.cutoff
 
   if ("Seurat" %in% class(dat)) {
     if (!requireNamespace(c("Seurat"), quietly=TRUE)) {
@@ -1080,26 +1081,28 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   }
   if (exp) dat <- expm1(dat) else expr.cutoff <- log1p(expr.cutoff)
   grp <- mdat[[grp]]
-  grp.ss <- table(grp, useNA="ifany")
-  names(grp.ss)[is.na(names(grp.ss))] <- "NA"
   if (is.factor(grp)) {
     grps <- levels(grp)
-    # if grp contains NA, it is kept as a distinct level
-    if (anyNA(grp)) grps <- c(grps, NA)
-  } else grps <- unique(grp)
+    if (anyNA(grp)) grps <- c(grps, "NA")
+  } else {
+    grps <- unique(grp)
+    grps[is.na(grps)] <- "NA"
+  }
   names(grps) <- grps
-  names(grps)[is.na(names(grps))] <- "NA"
 
   if (is.null(blk)) {
 
-    idxs <- lapply(grps, function(i) if (is.na(i)) is.na(grp) else grp==i)
-    tmp <- sapply(idxs, sum)
-    rmv <- tmp < ncells.cutoff
-    if (any(rmv)) {
-      message(sprintf("These groups below contain < %d cells, they will be removed:\n%s", ncells.cutoff, paste(sprintf("%s: #cells=%d", names(tmp)[rmv], tmp[rmv]), collapse="\n")))
-      idxs <- idxs[!rmv]
-      grp.ss <- grp.ss[names(tmp)[!rmv]]
+    grp.ss <- table(grp, useNA="ifany")
+    names(grp.ss)[is.na(names(grp.ss))] <- "NA"
+    grp.ss <- grp.ss[grps]
+    tmp <- grp.ss<ncells.cutoff
+    rmv.summ <- data.table(group=grps[tmp], n.cells=grp.ss[tmp])
+    if (any(tmp)) {
+      message(sprintf("These groups below contain < %d cells, they will be removed:\n%s", ncells.cutoff, rmv.summ[, paste(sprintf("%s (n=%d)", group, n.cells), collapse=", ")]))
+      grp.ss <- grp.ss[!tmp]
+      grps <- grps[!tmp]
     }
+    idxs <- lapply(grps, function(i) if (i=="NA") is.na(grp) else grp==i)
     if (identical(f1, mean)) {
       avg <- sapply(idxs, function(idx) sparseMatrixStats::rowMeans2(dat[, idx, drop=FALSE], useNames=TRUE))
     } else if (identical(f1, median)) {
@@ -1124,33 +1127,30 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   } else {
 
     blk <- mdat[[blk]]
-    blks <- unique(blk)
-    names(blks) <- blks
-    # if blk contains NA, it is kept as a distinct level
-    names(blks)[is.na(names(blks))] <- "NA"
-    tmp <- data.table()
-    idxs <- lapply(blks, function(i) {
-      if (is.na(i)) idx.i <- is.na(blk) else idx.i <- blk==i
-      res <- lapply(grps, function(j) {
-        if (is.na(j)) idx.j <- is.na(grp) else idx.j <- grp==j
+    tab <- as.data.table(table(grp, blk, useNA="ifany"))
+    tab[is.na(grp), grp:="NA"]
+    tab[is.na(blk), blk:="NA"]
+    tmp <- tab$N<ncells.cutoff
+    rmv.summ <- tab[tmp]
+    setnames(rmv.summ, c("group", "block", "n.cells"))
+    if (any(tmp)) {
+      tmp1 <- rmv.summ[, .(n=.N), by=group][order(-n), group]
+      rmv.summ[, group:=factor(group, levels=tmp1)]
+      rmv.summ <- rmv.summ[order(group, block)]
+      message(sprintf("These combinations of groups and blocks below contain < %d cells, they will be removed:\n%s", ncells.cutoff, rmv.summ[, .(x=paste(sprintf("%s (n=%d)", block, n.cells), collapse=", ")), by=group][, paste(sprintf("%s: {%s}", group, x), collapse="\n")]))
+      tab <- tab[!tmp]
+      grps <- grps[grps %in% tab$grp]
+    }
+    tmp <- tab[, .(n=sum(N), n1=.N), by=grp]
+    grp.ss <- tmp[, setNames(n, grp)[grps]]
+    grp.ss1 <- tmp[, setNames(n1, grp)[grps]]
+    idxs <- lapply(tab[, cn(unique(blk))], function(i) {
+      if (i=="NA") idx.i <- is.na(blk) else idx.i <- blk==i
+      lapply(tab[blk==i, cn(grp)], function(j) {
+        if (j=="NA") idx.j <- is.na(grp) else idx.j <- grp==j
         idx.i & idx.j
       })
-      tmp1 <- cbind(block=i, rbindlist(lapply(res, function(x) data.table(n.cells=sum(x))), idcol="group"))
-      rmv <- tmp1[, n.cells<ncells.cutoff]
-      if (any(rmv)) {
-        res <- res[!rmv]
-        tmp <<- rbind(tmp, tmp1[rmv], fill=TRUE)
-      }
-      res
     })
-    if (nrow(tmp)>0) {
-      tmp1 <- tmp[, .(n=.N), by=group][order(-n), setNames(n, group)]
-      grp.ss[names(tmp1)] <- grp.ss[names(tmp1)] - tmp1
-      grp.ss <- grp.ss[grp.ss>0]
-      tmp[, group:=factor(group, levels=names(tmp1))]
-      tmp <- tmp[order(group, block)]
-      message(sprintf("These combinations of groups and blocks below contain < %d cells, they will be removed:\n%s", ncells.cutoff, paste(tmp[, sprintf("%s in %s: #cells=%d", group, block, n.cells)], collapse="\n")))
-    }
     if (identical(f1, mean)) {
       avg <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(dat[, j, drop=FALSE], useNames=TRUE)))
     } else if (identical(f1, median)) {
@@ -1167,7 +1167,6 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
         avg <- lapply(avg, function(x) t(apply(x, 1, t1)))
       }
     }
-    grps <- grps[grps %in% unq(lapply(avg, colnames))]
     if (identical(f2, mean)) {
       avg <- sapply(grps, function(j) matrixStats::rowMeans2(do.call(cbind, lapply(avg, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
       if (exists("avg1")) avg1 <- sapply(grps, function(j) matrixStats::rowMeans2(do.call(cbind, lapply(avg1, function(x) x[, j[j %in% colnames(x)]])), na.rm=TRUE, useNames=TRUE))
@@ -1216,7 +1215,11 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   }
 
   if (exists("avg1")) res$avg.no.trans <- avg1
-  if (ret.grp.sizes) res$grp.sizes <- grp.ss
+  if (ret.grp.sizes) {
+    res$grp.ncells <- grp.ss
+    if (!is.null(blk)) res$grp.nblks <- grp.ss1
+  }
+  if (ret.rmv.summ) res$rmv.summ <- rmv.summ
   if (length(res)==1) return(res[[1]]) else return(res)
 }
 

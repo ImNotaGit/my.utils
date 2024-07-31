@@ -962,9 +962,9 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
 }
 
 
-sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, w=NULL, h=NULL, ...) {
+sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, t1=NULL, f2=mean, t2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, w=NULL, h=NULL, ...) {
   # interactive dotplot with heatmaply for single-cell gene expression data
-  # dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
+  # dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
   # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
   # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
   # gene.anno: data.frame or data.table, first column should contain gene symbols/names, each subsequent column is a variable used to annotate the genes
@@ -978,10 +978,11 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
     stop("Packages \"heatmaply\" and \"plotly\" needed for this function to work.")
   }
 
-  if (is.null(n1) && is.null(n2) && std) {
-    if (is.null(blk)) n2 <- scale else n1 <- scale
+  if (is.null(t1) && is.null(t2) && std) {
+    if (is.null(blk)) t2 <- scale else t1 <- scale
   }
-  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
+  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=FALSE, ret.grp.sizes=TRUE)
+  # todo: use ret.no.t=TRUE to also plot a non-scaled plot (provide this as an option)
   avg <- tmp$avg
   #avg[is.na(avg)] <- 0
   pct <- tmp$pct
@@ -1391,9 +1392,9 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
 }
 
 
-sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab, flip=TRUE, cols=NULL, pal=1, m3d=FALSE, ...) {
+sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, t1=NULL, f2=mean, t2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab, flip=TRUE, cols=NULL, pal=1, m3d=FALSE, ...) {
   # dotplot with ComplexHeatmap for single-cell gene expression data
-  # dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
+  # dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
   # if gns is NULL and `markers` is provided, will automatically set gns to unique(unlist(markers))
   # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
   # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
@@ -1408,17 +1409,18 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   # flip: when FALSE will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE (default) will flip the X and Y axes (and xlab will become ylab)
   # ...: passed to plot.hm
 
-  if (is.null(n1) && is.null(n2) && std) {
-    if (is.null(blk)) n2 <- scale else n1 <- scale
+  if (is.null(t1) && is.null(t2) && std) {
+    if (is.null(blk)) t2 <- scale else t1 <- scale
   }
   if (is.null(gns) && !is.null(markers)) gns <- unique(unlist(markers))
   if (missing(xlab)) xlab <- grp
-  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
+  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=FALSE, ret.grp.sizes=TRUE)
+  # todo: use ret.no.t=TRUE to also plot a non-scaled plot (provide this as an option)
   avg <- tmp$avg
   pct <- tmp$pct
-  # add group sizes (cell numbers) to group names
+  # add group sizes (cell and block/sample numbers) to group names
   grps <- colnames(avg)
-  grps <- setNames(sprintf("%s (n=%d)", grps, tmp$grp.sizes[grps]), grps)
+  grps <- setNames(sprintf("%s (n=%d;%d)", grps, tmp$grp.ncells[grps], tmp$grp.nblks[grps]), grps)
   colnames(avg) <- colnames(pct) <- grps
   if (!is.null(grp.anno)) grp.anno[[1]] <- grps[grp.anno[[1]]]
   # markers
