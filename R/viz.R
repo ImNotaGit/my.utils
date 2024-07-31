@@ -1391,7 +1391,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
 }
 
 
-sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab, flip=FALSE, cols=NULL, pal=1, m3d=FALSE, ...) {
+sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab, flip=TRUE, cols=NULL, pal=1, m3d=FALSE, ...) {
   # dotplot with ComplexHeatmap for single-cell gene expression data
   # dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
   # if gns is NULL and `markers` is provided, will automatically set gns to unique(unlist(markers))
