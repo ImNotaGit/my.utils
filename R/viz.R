@@ -1391,23 +1391,28 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
 }
 
 
-sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab="Cluster", flip=FALSE, cols=NULL, pal=1, m3d=FALSE, ...) {
+sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, n1=NULL, f2=mean, n2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab, flip=FALSE, cols=NULL, pal=1, m3d=FALSE, ...) {
   # dotplot with ComplexHeatmap for single-cell gene expression data
   # dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
+  # if gns is NULL and `markers` is provided, will automatically set gns to unique(unlist(markers))
   # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
   # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
   # gene.anno: a data.frame or data.table of gene annotation, first column should contain gene symbols/names
   # grp.anno: similar to gene.anno, group annotation, first column should contain group names
   # markers: a list of marker gene annotation, e.g. list(CD8T=c("CD8A", "CD8B")), if provided will add to gene.anno
   # flag: if TRUE and `markers` is provided, will highlight the cases where the gene expression in a group is not as expected (either unexpected high expression or unexpected low expression)
-  # grp.map: a named vector mapping each group name (in grp) to the class (e.g. cell type) name of `markers` (i.e. names(markers)); if NULL, will assume that the group names already match names(markers)
-  # markers.wl: a list of whitelist markers to avoid flagging, e.g. list(B="CD4"), these markers are allowed to be expressed in the corresponding classes/cell types; will be ignored unless flag=TRUE
-  # flip: by default will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE will flip the X and Y axes (and xlab will become ylab)
+  # grp.map: a named list or vector mapping each group name (in grp) to the class (e.g. cell type) name(s) of `markers` (i.e. names(markers)); group names not in `grp.map` will be kept as is before trying to match names(markers); if NULL, will assume that the group names already match names(markers)
+  # markers.wl: a list of whitelist markers to avoid flagging, e.g. list(B="CD4"), these markers are allowed to be expressed in the corresponding classes/cell types; if provided will automatically set flag=TRUE
+  # if markers.wl is not NULL and a class/cell type is in `markers` but not in `markers.wl`, the class/cell type won't be included for flagging of unexpected high expression
+  # xlab: if missing will set to `grp`, to not show xlab set it to NULL
+  # flip: when FALSE will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE (default) will flip the X and Y axes (and xlab will become ylab)
   # ...: passed to plot.hm
 
   if (is.null(n1) && is.null(n2) && std) {
     if (is.null(blk)) n2 <- scale else n1 <- scale
   }
+  if (is.null(gns) && !is.null(markers)) gns <- unique(unlist(markers))
+  if (missing(xlab)) xlab <- grp
   tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, n1, f2, n2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
   avg <- tmp$avg
   pct <- tmp$pct
@@ -1426,7 +1431,7 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
       gene.anno <- merge(gene.anno, tmp, by="gene", all=TRUE)
     } else gene.anno <- tmp[, .(gene, `marker of`)]
 
-    if (flag) {
+    if (flag || !is.null(markers.wl)) {
       cutoffs <- apply(avg, 1, function(x) {
         x <- x[!is.na(x)]
         if (length(x)<2) return(c(lo=Inf, hi=-Inf))
@@ -1436,15 +1441,16 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
         c(lo=lo, hi=hi)
       })
       gns <- rownames(avg)
-      if (is.null(grp.map)) grp.map <- setNames(names(grps), names(grps))
+      grp.map <- c(as.list(grp.map), as.list(cn(setdiff(names(grps), names(grp.map)))))
       fmat <- sapply(setNames(names(grps), grps), function(g) {
         x <- setNames(rep(0, length(gns)), gns)
-        ct <- grp.map[g]
-        if (!ct %in% names(markers)) return(x)
-        hi.exp <- gns %in% markers[[ct]]
+        cts <- grp.map[[g]]
+        if (!any(cts %in% names(markers)) || (!is.null(markers.wl) && !any(cts %in% names(markers.wl)))) return(x)
+        hi.exp <- gns %in% unlist(markers[cts])
         lo.obs <- avg[, grps[g]]<cutoffs["hi",]
         x[hi.exp & lo.obs] <- 1
-        lo.exp <- gns %in% setdiff(unlist(markers[names(markers)!=ct]), markers.wl[[ct]])
+        if (!is.null(markers.wl) && !any(cts %in% names(markers.wl))) return(x)
+        lo.exp <- gns %in% setdiff(unlist(markers[!names(markers) %in% cts]), unlist(markers.wl[cts]))
         hi.obs <- avg[, grps[g]]>cutoffs["lo",]
         x[lo.exp & hi.obs] <- -1
         x
