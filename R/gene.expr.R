@@ -1008,13 +1008,23 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, thres=FALSE, coef, c
 }
 
 
-make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
+make.pseudobulk <- function(dat, mdat, blk, ncells.cutoff=10) {
   # create pseudobulk gene expression data for single-cell RNA-seq
-  # mat: gene-by-cell matrix (assuming sparse)
-  # mdat: cell meta data, data.frame or other objects coerceable to data.table
+  # dat: gene-by-cell matrix (assuming sparse), or could be a Seurat object, will take dat$RNA@counts
+  # mdat: cell meta data, data.frame or other objects coerceable to data.table; if dat is a Seurat object, this will default to dat@meta.data
   # blk: names of one or more sample/bulk variables (as in column names of mdat)
   # ncells.cutoff: only keep samples/bulks with >= this number of cells
-  # return: list(mat=mat, mdat=mdat), where mat is the pseudobulk gene-by-sample/bulk matrix, mdat is the corresponding meta data for the pseudobulk samples, the latter is obtained by dropping any variables (columns) with non-unique values within a bulk from the original cell-level mdat
+  # return: list(mat=mat, mdat=mdat), where mat is the pseudobulk gene-by-sample/bulk matrix, mdat is the corresponding meta data for the pseudobulk samples,
+  # the pseudobulk meta data is obtained by dropping any non-numeric variables (columns) with non-unique values within a bulk from the original cell-level mdat,
+  # for numeric columns, average is taken by default; will also include nCount and nFeature (these will be properly recomputed)
+
+  if ("Seurat" %in% class(dat)) {
+    if (!requireNamespace(c("Seurat"), quietly=TRUE)) {
+      stop("Packages \"Seurat\" needed for this function to work.")
+    }
+    if (missing(mdat)) mdat <- dat@meta.data
+    dat <- dat$RNA@counts
+  }
 
   mdat <- as.data.table(mdat)
   tmp <- sapply(blk, function(i) anyNA(mdat[, i, with=FALSE]))
@@ -1027,16 +1037,22 @@ make.pseudobulk <- function(mat, mdat, blk, ncells.cutoff=10) {
     idx <- blk %in% names(tmp)[tmp]
     blk <- blk[idx]
     mdat <- mdat[idx]
-    mat <- mat[, idx, drop=FALSE]
+    dat <- dat[, idx, drop=FALSE]
   }
   blk <- factor(blk)
   tmp <- Matrix::sparseMatrix(i=1:length(blk), j=as.numeric(blk), dims=c(length(blk), length(levels(blk))), dimnames=list(NULL, levels(blk)))
-  mat <- as.matrix(mat %*% tmp)
+  dat <- as.matrix(dat %*% tmp)
+  nn <- !sapply(mdat, is.numeric)
   tmp <- sapply(mdat, function(x) any(colSums(table(x, blk, useNA="ifany")>0)>1))
-  if (any(tmp)) message(sprintf("These variables will be dropped since they have multiple values/levels within a bulk:\n%s\n", paste(names(mdat)[tmp], collapse=", ")))
-  mdat[, blk:=blk]
-  mdat <- unique(mdat[, !tmp, with=FALSE])[match(colnames(mat), blk), -"blk"]
-  list(mat=mat, mdat=mdat)
+  if (any(nn & tmp)) message(sprintf("These non-numeric variables will be dropped since they have multiple values/levels within a bulk:\n%s\n", paste(names(mdat)[nn & tmp], collapse=", ")))
+  mdat[, blk_:=blk]
+  mdat1 <- unique(mdat[, c(nn & !tmp, TRUE), with=FALSE])[match(colnames(dat), blk_), -"blk_"]
+  mdat1 <- cbind(mdat1, data.table(nCount=colSums(dat), nFeature=colSums(dat>0)))
+  tmp <- setdiff(names(mdat)[!nn], c("nCount_RNA", "nFeature_RNA"))
+  tmp <- mdat[, c(tmp, "blk_"), with=FALSE][, lapply(.SD, mean, na.rm=TRUE), by=blk_][match(colnames(dat), blk_), -"blk_"]
+  setnames(tmp, paste0("mean.", names(tmp)))
+  mdat1 <- cbind(mdat1, tmp)
+  list(mat=dat, mdat=mdat1)
 }
 
 
