@@ -1420,7 +1420,11 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   pct <- tmp$pct
   # add group sizes (cell and block/sample numbers) to group names
   grps <- colnames(avg)
-  grps <- setNames(sprintf("%s (n=%d;%d)", grps, tmp$grp.ncells[grps], tmp$grp.nblks[grps]), grps)
+  if (!is.null(blk)) {
+    grps <- setNames(sprintf("%s (n=%d;%d)", grps, tmp$grp.ncells[grps], tmp$grp.nblks[grps]), grps)
+  } else {
+    grps <- setNames(sprintf("%s (n=%d)", grps, tmp$grp.ncells[grps]), grps)
+  }
   colnames(avg) <- colnames(pct) <- grps
   if (!is.null(grp.anno)) grp.anno[[1]] <- grps[grp.anno[[1]]]
   # markers
