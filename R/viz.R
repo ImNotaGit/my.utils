@@ -1418,6 +1418,10 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   # todo: use ret.no.t=TRUE to also plot a non-scaled plot (provide this as an option)
   avg <- tmp$avg
   pct <- tmp$pct
+  # remove any genes whose value is NaN in all groups
+  idx <- rowSums(!is.na(avg))>0
+  avg <- avg[idx, , drop=FALSE]
+  pct <- pct[idx, , drop=FALSE]
   # add group sizes (cell and block/sample numbers) to group names
   grps <- colnames(avg)
   if (!is.null(blk)) {
@@ -1440,7 +1444,7 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
     if (flag || !is.null(markers.wl)) {
       cutoffs <- apply(avg, 1, function(x) {
         x <- x[!is.na(x)]
-        if (length(x)<2) return(c(lo=Inf, hi=-Inf))
+        if (length(x)<=2) return(c(lo=Inf, hi=-Inf))
         km <- kmeans(x, 2, nstart=5)
         hi <- min(x[km$cluster==which.max(km$centers)])
         lo <- max(x[km$cluster==which.min(km$centers)])
