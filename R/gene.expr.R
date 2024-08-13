@@ -317,11 +317,10 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
     gns <- rownames(mat)
   } else if (is.list(dat) && "voom" %in% names(dat) && class(dat$voom)=="EList") {
     # if dat is output from voom()
+    if (!is.null(pheno) || !is.null(design)) message("Using the design matrix saved in `dat`, ignoring `pheno`, `model` and `design`, if provided.")
     mat <- dat$voom
     gns <- dat$genes
     design <- dat$design
-    pheno <- dat$pheno
-    if (!is.null(design)) message("Using the design matrix saved in `dat`, ignoring `pheno` and `model`, if provided.")
   }
 
   pars <- .process.de.params(dat=mat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef)
