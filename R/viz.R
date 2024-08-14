@@ -608,7 +608,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
 }
 
 
-.plot.fracs <- function(dat, xlab=NULL, ylab="Fraction", tit=NULL, facet.tit=NULL, lab=NULL, clrs=NULL, mdat=NULL, xclrs=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, ori=c("h", "v"), no.axs=FALSE, no.nlab=FALSE, no.lgd=FALSE, lgd.pos="bottom", lgd.tit=NULL, lgd.mgn=NULL, rs.lgd=0.1, ret.axs=FALSE, ...) {
+.plot.fracs <- function(dat, xlab=NULL, ylab="Fraction", tit=NULL, facet.tit=NULL, lab=NULL, lab.size=3, lab.frac.ge=0.05, clrs=NULL, mdat=NULL, xclrs=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, ori=c("h", "v"), no.axs=FALSE, no.nlab=FALSE, lgd.pos="bottom", lgd.tit=NULL, lgd.mgn=NULL, rs.lgd=0.1, ret.axs=FALSE, ...) {
   # inner plotting function of plot.fracs for plotting proportion stacked barplots with geom_bar(..., position="fill")
   # facet.tit: if not NULL, will place everything under a single facet with this label
   # no.axs: do not plot X or Y axis depending on plot direction
@@ -680,14 +680,17 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   dat1[, ygrp:=factor(ygrp, levels=ylvls)]
   if (!is.null(facet.tit)) dat1[, fct:=facet.tit]
   if (!is.null(mdat)) mdat <- mdat[match(xlvls, x)]
-
+  if (!is.null(lab)) {
+    if (isTRUE(lab)) dat1[, label:=ygrp] else dat1[, label:=get(lab)]
+    dat1[y<lab.frac.ge, label:=""]
+  }
   p <- ggplot(dat1, aes(x=x, y=y, fill=ygrp)) +
     ggtitle(tit) + xlab(xlab) + scale_y_continuous(name=ylab, breaks=seq(0, 1, 0.1)) +
     { if (is.null(facet.tit)) NULL else facet_wrap(~fct, strip.position=switch(dir, h="right", v="top")) } +
     geom_bar(stat="identity", position="fill", width=0.85, color="grey50", size=0.2) +
     { if ("sep" %in% names(mdat)) geom_vline(xintercept=mdat[, which(sep!=sep[c(2:.N,.N)])+0.5], size=0.2, color="grey50") else NULL } +
     { if (is.null(clrs)) scale_fill_discrete(name=lgd.tit, guide=guide_legend(title.position=if (lgd.pos=="bottom") "bottom" else "top", title.hjust=if (lgd.pos=="bottom") 0.5 else 0, ...)) else scale_fill_manual(name=lgd.tit, values=clrs, guide=guide_legend(title.position=if (lgd.pos=="bottom") "bottom" else "top", title.hjust=if (lgd.pos=="bottom") 0.5 else 0, ...)) } +
-    { if (is.null(lab)) NULL else geom_text(aes_string(label=if (isTRUE(lab)) "ygrp" else lab), size=3, position=position_fill(vjust=0.5)) } +
+    { if (is.null(lab)) NULL else geom_text(aes(label=label), size=lab.size, position=position_fill(vjust=0.5)) } +
     { if ("ntot" %in% names(mdat) && !no.nlab) annotate(geom="text", x=length(xlvls)+1, y=1.05, label="Total #", size=3, angle=switch(dir, h=0, v=90)) else NULL } +
     { if ("ntot" %in% names(mdat)) annotate(geom="text", x=1:length(xlvls), y=1.05, label=mdat$ntot, size=3, angle=switch(dir, h=0, v=90)) else NULL } +
     theme_classic()
@@ -705,26 +708,33 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
       strip.text=element_text(size=9, margin=margin(0,2,0,2)),
       strip.background=element_rect(size=0.6),
       plot.margin=if (no.nlab) margin(0,0,0,0) else margin(10,0,0,0),
-      legend.position=if (no.lgd) "none" else lgd.pos,
+      legend.position=lgd.pos,
       legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
       legend.text=element_text(size=8),
       legend.key.size=unit(8,"pt"),
       legend.box.margin=if (lgd.pos=="bottom") margin(c(-10,10,0,0)) else margin()
     )
   } else if (dir=="v") {
+    if (dendro) {
+      ag <- 90
+      hj <- 1
+    } else {
+      ag <- 40
+      hj <- 1
+    }
     p <- p + coord_cartesian(clip="off") + theme(
       plot.title=if (is.null(tit)) element_blank() else element_text(),
       axis.text.y=if (no.axs) element_blank() else element_text(),
       axis.title.y=if (no.axs) element_blank() else element_text(),
       axis.line.y=if (no.axs) element_blank() else element_line(),
       axis.ticks.y=if (no.axs) element_blank() else element_line(),
-      axis.text.x=if (is.null(xclrs)) element_text(angle=90, hjust=1, vjust=0.5) else element_text(angle=90, hjust=1, vjust=0.5, color=xclrs[xlvls]),
+      axis.text.x=if (is.null(xclrs)) element_text(angle=ag, hjust=hj, vjust=0.5) else element_text(angle=ag, hjust=hj, vjust=0.5, color=xclrs[xlvls]),
       axis.title.x=if (is.null(xlab) || dendro) element_blank() else element_text(),
       panel.grid.major.y=element_line(size=0.2, color="grey50"),
       strip.text=element_text(size=9, margin=margin(2,0,2,0)),
       strip.background=element_rect(size=0.6),
       plot.margin=if (no.nlab) margin(0,0,0,0) else margin(0,10,0,0),
-      legend.position=if (no.lgd) "none" else lgd.pos,
+      legend.position=lgd.pos,
       legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
       legend.text=element_text(size=8),
       legend.key.size=unit(8,"pt"),
@@ -758,7 +768,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
     if (dir=="h") {
       cowplot::plot_grid(dend, p, nrow=1, align="h", axis="tb", rel_widths=c(rs.dend, 1), scale=c(1, dend.scale))
     } else if (dir=="v") {
-      if (!no.lgd && lgd.pos=="bottom") {
+      if (lgd.pos=="bottom") {
         lgd <- cowplot::get_legend(p)
         p <- p + theme(legend.position="none")
         cowplot::plot_grid(p, dend, lgd, ncol=1, align="v", axis="lr", rel_heights=c(1, rs.dend, rs.lgd), scale=c(1, dend.scale, 1))
@@ -769,12 +779,12 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   } else p
 }
 
-plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=NULL, xvar=NULL, ygrp=NULL, yvar=NULL, lab=NULL, mdat=NULL, mdat.xvar=NULL, ntot=NULL, xgrp=NULL, xcol=NULL, xsep=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, yord=c("default", "keep"), lgd.tit=NULL, lgd.pos=c("bottom", "right"), rs.xgrp=NULL, rs.lgd=NULL, ori=c("h", "v"), ...) {
+plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=NULL, xvar=NULL, ygrp=NULL, yvar=NULL, lab=NULL, lab.size=3, lab.frac.ge=0.05, mdat=NULL, mdat.xvar=NULL, ntot=NULL, xgrp=NULL, xcol=NULL, xsep=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, yord=c("default", "keep"), lgd.tit=NULL, lgd.pos=c("bottom", "right", "none"), rs.xgrp=NULL, rs.lgd=NULL, ori=c("h", "v"), ...) {
   # function for visualizing fraction data with proportion stacked bar plots (i.e. with geom_bar(..., position="fill"))
   # dat: a variable-by-sample matrix or a data.table in the long format
   # mode: whether the data values are counts or fractions
   # xvar, ygrp, yvar: if dat is a long data.table, these are required and are the column names in dat corresponding to the sample, variable, and variable value (i.e. count or fraction values) respectively
-  # lab: if not NULL, labels will be placed on each bar: if TRUE, the labels will be the variable names; if dat is a long data.table, can also be a column name and the corresponding values in this column will be used as the labels
+  # lab: if not NULL, labels will be placed on each bar when fraction>=lab.frac.ge: if TRUE, the labels will be the variable names; if dat is a long data.table, can also be a column name and the corresponding values in this column will be used as the labels
   # mdat: optional, a data.table of sample-level meta data, one row per sample
   # mdat.xvar: the column name in mdat for sample (if NULL will use xvar, and if xvar is NULL will assume the first column)
   # ntot: if dat is fraction, can provide total count per sample data here; if dat is count, will calculate total count from dat and this will be ignored; provided either as a vector (preferentially named by sample name) or a column name in mdat (if the latter is provided)
@@ -800,6 +810,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
   if (xord!="clust") dendro <- FALSE
 
   if (is.matrix(dat)) {
+    if (class(dat)=="table") class(dat) <- "matrix"
     if (mode=="count") {
       ntot <- colSums(dat)
       dat <- dat/rep(colSums(dat), each=nrow(dat))
@@ -890,8 +901,8 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
       # if w/o dendrogram, I first plot each group w/o Y-axis and later add a common Y-axis, this will make it easier to set a useable default rs.xgrp
       # but if with dendrogram, I cannot get the above approach to work so I include Y-axis in the first/last plot; as a result manual adjustment of rs.xgrp is usually necessary
       if (dendro) {
-        .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=i, lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[i], rs.dend=rs.dend, ori=dir, no.axs=switch(dir, h=i!=grps[length(grps)], v=i!=grps[1]), no.nlab=switch(dir, h=i!=grps[1], v=i!=grps[length(grps)]), no.lgd=TRUE)
-      } else .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=i, lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[i], rs.dend=rs.dend, ori=dir, no.axs=TRUE, no.nlab=switch(dir, h=i!=grps[1], v=i!=grps[length(grps)]), no.lgd=TRUE)
+        .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=i, lab=lab, lab.size=lab.size, lab.frac.ge=lab.frac.ge, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[i], rs.dend=rs.dend, ori=dir, no.axs=switch(dir, h=i!=grps[length(grps)], v=i!=grps[1]), no.nlab=switch(dir, h=i!=grps[1], v=i!=grps[length(grps)]), lgd.pos="none")
+      } else .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=i, lab=lab, lab.size=lab.size, lab.frac.ge=lab.frac.ge, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[i], rs.dend=rs.dend, ori=dir, no.axs=TRUE, no.nlab=switch(dir, h=i!=grps[1], v=i!=grps[length(grps)]), lgd.pos="none")
     })
     rel <- mdat[, .(n=.N), by=grp][order(grp), n]
     rel[rel %in% 1:2] <- rel[rel %in% 1:2]+0.4
@@ -911,7 +922,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
       if (!dendro) {
         mdat1 <- mdat[grp==grps[length(grps)]]
         dat1 <- dat[x %in% mdat1$x]
-        y.axs <- .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=grps[length(grps)], lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[grps[length(grps)]], rs.dend=rs.dend, ori=dir, no.nlab=TRUE, no.lgd=TRUE, ret.axs=TRUE)
+        y.axs <- .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=grps[length(grps)], lab=lab, lab.size=lab.size, lab.frac.ge=lab.frac.ge, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[grps[length(grps)]], rs.dend=rs.dend, ori=dir, no.nlab=TRUE, lgd.pos="none", ret.axs=TRUE)
         p <- gridExtra::arrangeGrob(p, bottom=y.axs)
       }
       if (!is.null(xlab)) {
@@ -935,7 +946,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
       if (!dendro) {
         mdat1 <- mdat[grp==grps[1]]
         dat1 <- dat[x %in% mdat1$x]
-        y.axs <- .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=grps[1], lab=lab, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[grps[1]], rs.dend=rs.dend, ori=dir, no.nlab=TRUE, no.lgd=TRUE, ret.axs=TRUE)
+        y.axs <- .plot.fracs(dat1, xlab=NULL, ylab=ylab, facet.tit=grps[1], lab=lab, lab.size=lab.size, lab.frac.ge=lab.frac.ge, clrs=clrs, mdat=mdat1, xclrs=xclrs, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale[grps[1]], rs.dend=rs.dend, ori=dir, no.nlab=TRUE, lgd.pos="none", ret.axs=TRUE)
         p <- gridExtra::arrangeGrob(p, left=y.axs)
       }
       if (!is.null(xlab)) {
@@ -956,7 +967,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
     }
   } else {
     if (is.null(rs.lgd)) rs.lgd <- 0.1
-    p <- .plot.fracs(dat, xlab=xlab, ylab=ylab, tit=tit, lab=lab, clrs=clrs, mdat=mdat, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale, rs.dend=rs.dend, ori=dir, lgd.tit=lgd.tit, lgd.pos=lgd.pos, rs.lgd=rs.lgd, ...)
+    p <- .plot.fracs(dat, xlab=xlab, ylab=ylab, tit=tit, lab=lab, lab.size=lab.size, lab.frac.ge=lab.frac.ge, clrs=clrs, mdat=mdat, xord=xord, clust.fun=clust.fun, dendro=dendro, dend.scale=dend.scale, rs.dend=rs.dend, ori=dir, lgd.tit=lgd.tit, lgd.pos=lgd.pos, rs.lgd=rs.lgd, ...)
   }
   p
 }
