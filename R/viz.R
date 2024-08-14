@@ -1420,6 +1420,7 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   pct <- tmp$pct
   # remove any genes whose value is NaN in all groups
   idx <- rowSums(!is.na(avg))>0
+  if (any(!idx)) message(sprintf("These genes have NA values across all groups, they will be excluded:\n%s", paste(rownames(avg)[!idx], collapse=", ")))
   avg <- avg[idx, , drop=FALSE]
   pct <- pct[idx, , drop=FALSE]
   # add group sizes (cell and block/sample numbers) to group names
@@ -1484,15 +1485,25 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
     y.anno <- grp.anno
     ylab <- xlab
     xlab <- NULL
+    clus <- "y"
   } else {
     x.anno <- grp.anno
     y.anno <- gene.anno
     ylab <- NULL
+    clus <- "x"
   }
   if (is.null(cols)) {
     if (std) cols <- 3 else cols <- 2
   }
 
-  plot.hm(avg, pct, sp=FALSE, xlab, ylab, x.anno, y.anno, name=ifelse(std, "std expr", "log expr"), sname="% expr", cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
+  tryCatch({
+    plot.hm(avg, pct, sp=FALSE, xlab, ylab, x.anno, y.anno, name=ifelse(std, "std expr", "log expr"), sname="% expr", cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
+  }, error=function(e) {
+    # if error, could be that clustering failed due to NA's
+    message("Will try replacing all NA's with 0. Alternatively, try pass clust='' to disable clustering of rows and columns of the heatmap.")
+    avg[is.na(avg)] <- 0
+    pct[is.na(pct)] <- 0
+    plot.hm(avg, pct, sp=FALSE, xlab, ylab, x.anno, y.anno, name=ifelse(std, "std expr", "log expr"), sname="% expr", cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
+  })
 }
 
