@@ -707,7 +707,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
       panel.grid.major.x=element_line(size=0.2, color="grey50"),
       strip.text=element_text(size=9, margin=margin(0,2,0,2)),
       strip.background=element_rect(size=0.6),
-      plot.margin=if (no.nlab) margin(0,0,0,0) else margin(10,0,0,0),
+      plot.margin=if (no.nlab) margin(0,0,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)) else margin(10,0,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)),
       legend.position=lgd.pos,
       legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
       legend.text=element_text(size=8),
@@ -718,9 +718,11 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
     if (dendro) {
       ag <- 90
       hj <- 1
+      vj <- 0.5
     } else {
       ag <- 40
       hj <- 1
+      vj <- NULL
     }
     p <- p + coord_cartesian(clip="off") + theme(
       plot.title=if (is.null(tit)) element_blank() else element_text(),
@@ -728,12 +730,12 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
       axis.title.y=if (no.axs) element_blank() else element_text(),
       axis.line.y=if (no.axs) element_blank() else element_line(),
       axis.ticks.y=if (no.axs) element_blank() else element_line(),
-      axis.text.x=if (is.null(xclrs)) element_text(angle=ag, hjust=hj, vjust=0.5) else element_text(angle=ag, hjust=hj, vjust=0.5, color=xclrs[xlvls]),
+      axis.text.x=if (is.null(xclrs)) element_text(angle=ag, hjust=hj, vjust=vj) else element_text(angle=ag, hjust=hj, vjust=vj, color=xclrs[xlvls]),
       axis.title.x=if (is.null(xlab) || dendro) element_blank() else element_text(),
       panel.grid.major.y=element_line(size=0.2, color="grey50"),
       strip.text=element_text(size=9, margin=margin(2,0,2,0)),
       strip.background=element_rect(size=0.6),
-      plot.margin=if (no.nlab) margin(0,0,0,0) else margin(0,10,0,0),
+      plot.margin=if (no.nlab) margin(0,0,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)) else margin(0,10,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)),
       legend.position=lgd.pos,
       legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
       legend.text=element_text(size=8),
