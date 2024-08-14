@@ -1457,6 +1457,7 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
       cutoffs <- apply(avg, 1, function(x) {
         x <- x[!is.na(x)]
         if (length(x)<=2) return(c(lo=Inf, hi=-Inf))
+        set.seed(1)
         km <- kmeans(x, 2, nstart=5)
         hi <- min(x[km$cluster==which.max(km$centers)])
         lo <- max(x[km$cluster==which.min(km$centers)])

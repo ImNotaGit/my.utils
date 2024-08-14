@@ -1073,7 +1073,7 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   # expr.cutoff: this is the cutoff on the normalized count scale, i.e. not on log scale! For data normalized with Seurat::NormalizeData by default, the unit is UMI per 1e4 total UMIs
   # ncells.cutoff: groups (or combinations of group and block) containing < this number of cells will be discarded
   # ret.no.t: whether to also return a version non-transformed average results if `t1` or `t2` are given, if TRUE will return as $avg.no.trans (this is for sc.dotplot)
-  # ret.grp.sizes: whether to also return the sizes of the groups after removing cells based on ncells.cutoff, if TRUE will return as a named vector as $grp.ncells and $grp.nblks if blk is given (this for sc.dotplot)
+  # ret.grp.sizes: whether to also return the sizes of the groups after removing cells based on ncells.cutoff, if TRUE will return as a named vector as $grp.ncells and $grp.nblks if blk is given (this for sc.dotplot), also $grp.sizes as a data.table if blk is given
   # ret.rmv.summ: whether to also return a summary of the removed groups and blocks due to ncells.cutoff
 
   if ("Seurat" %in% class(dat)) {
@@ -1166,6 +1166,7 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
         idx.i & idx.j
       })
     })
+    setnames(tab, c("group", "block", "n"))
     if (identical(f1, mean)) {
       avg <- lapply(idxs, function(js) sapply(js, function(j) sparseMatrixStats::rowMeans2(dat[, j, drop=FALSE], useNames=TRUE)))
     } else if (identical(f1, median)) {
@@ -1208,7 +1209,11 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
     }
     if (exists("mdat.res")) {
       avg <- cbind(mdat.res, t(avg))
-      if (exists("avg1")) avg1 <- cbind(mdat.res, t(avg1))
+      avg <- merge(avg, tab, by=c("group", "block"), all=TRUE)
+      if (exists("avg1")) {
+        avg1 <- cbind(mdat.res, t(avg1))
+        avg1 <- merge(avg1, tab, by=c("group", "block"), all=TRUE)
+      }
     }
     res <- list(avg=avg)
     if (pct) {
@@ -1223,7 +1228,10 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
         pct <- do.call(cbind, pct)
       }
       pct <- 100*pct
-      if (exists("mdat.res")) pct <- cbind(mdat.res, t(pct))
+      if (exists("mdat.res")) {
+        pct <- cbind(mdat.res, t(pct))
+        pct <- merge(pct, tab, by=c("group", "block"), all=TRUE)
+      }
       res$pct <- pct
     }
 
@@ -1232,7 +1240,10 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   if (exists("avg1")) res$avg.no.trans <- avg1
   if (ret.grp.sizes) {
     res$grp.ncells <- grp.ss
-    if (!is.null(blk)) res$grp.nblks <- grp.ss1
+    if (!is.null(blk)) {
+      res$grp.nblks <- grp.ss1
+      res$grp.sizes <- tab
+    }
   }
   if (ret.rmv.summ) res$rmv.summ <- rmv.summ
   if (length(res)==1) return(res[[1]]) else return(res)
