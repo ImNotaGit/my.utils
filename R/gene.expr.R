@@ -1111,7 +1111,7 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
     names(grp.ss)[is.na(names(grp.ss))] <- "NA"
     grp.ss <- grp.ss[grps]
     tmp <- grp.ss<ncells.cutoff
-    rmv.summ <- data.table(group=grps[tmp], n.cells=grp.ss[tmp])
+    rmv.summ <- data.table(group=grps[tmp], n.cells=c(grp.ss[tmp]))
     if (any(tmp)) {
       message(sprintf("These groups below contain < %d cells, they will be removed:\n%s", ncells.cutoff, rmv.summ[, paste(sprintf("%s (n=%d)", group, n.cells), collapse=", ")]))
       grp.ss <- grp.ss[!tmp]
