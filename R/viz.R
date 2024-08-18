@@ -1369,7 +1369,8 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
     top_annotation=if (grepl("t", anno.pos)) col.ha else NULL,
     bottom_annotation=if (grepl("b", anno.pos)) col.ha else NULL,
     show_heatmap_legend=is.null(smat),
-    heatmap_legend_param=list(direction=lgd.ori, grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"))
+    heatmap_legend_param=list(direction=lgd.ori, grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain")),
+    ...
   )
 
   if (!is.null(smat)) {
