@@ -978,7 +978,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
 sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, t1=NULL, f2=mean, t2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, w=NULL, h=NULL, ...) {
   # interactive dotplot with heatmaply for single-cell gene expression data
   # dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
-  # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
+  # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `t1` and `t2` are not specified, will automatically set `t1` or `t2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `t1` and `t2` is given, the transformation will be determined by `t1` and `t2`
   # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
   # gene.anno: data.frame or data.table, first column should contain gene symbols/names, each subsequent column is a variable used to annotate the genes
   # grp.anno: similar to gene.anno, annotation for the groups
@@ -987,22 +987,26 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   # grp.name: what the groups represent, e.g. "cluster"; this is used in the hovertext
   # flip: by default will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE will flip the X and Y axes (and xlab will become ylab)
 
-  if (!requireNamespace(c("heatmaply", "plotly"), quietly=TRUE)) {
-    stop("Packages \"heatmaply\" and \"plotly\" needed for this function to work.")
+  for (pkg in c("heatmaply", "plotly")) {
+    if (!requireNamespace(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
   }
 
   if (is.null(t1) && is.null(t2) && std) {
     if (is.null(blk)) t2 <- scale else t1 <- scale
   }
-  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=FALSE, ret.grp.sizes=TRUE)
+  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
   # todo: use ret.no.t=TRUE to also plot a non-scaled plot (provide this as an option)
   avg <- tmp$avg
   #avg[is.na(avg)] <- 0
   pct <- tmp$pct
-  grp.ss <- tmp$grp.sizes
   gns <- rownames(avg)
-  if (!is.null(n1) || !is.null(n2)) txt.mat <- sprintf("log expr: %.3g\n", tmp$avg.no.trans) else txt.mat <- ""
-  txt.mat <- paste0(txt.mat, sprintf("%s size: %d\n", grp.name, rep(grp.ss[colnames(avg)], each=nrow(avg))))
+  if (!is.null(t1) || !is.null(t2)) txt.mat <- sprintf("log expr: %.3g\n", tmp$avg.no.trans) else txt.mat <- ""
+  txt.mat <- paste0(txt.mat, sprintf("# of cells in %s: %d\n", grp.name, rep(tmp$grp.ncells[colnames(avg)], each=nrow(avg))))
+  if (!is.null(blk)) {
+    txt.mat <- paste0(txt.mat, sprintf("# of samples in %s: %d\n", grp.name, rep(tmp$grp.nblks[colnames(avg)], each=nrow(avg))))
+  }
   if (!is.null(gene.txt)) txt.mat <- paste0(txt.mat, paste0(rep(gene.txt[gns], ncol(avg)), "\n"))
   if (!is.null(grp.txt)) txt.mat <- paste0(txt.mat, paste0(rep(grp.txt[colnames(avg)], each=nrow(avg)), "\n"))
   dim(txt.mat) <- dim(avg)
@@ -1410,7 +1414,7 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   # dotplot with ComplexHeatmap for single-cell gene expression data
   # dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
   # if gns is NULL and `markers` is provided, will automatically set gns to unique(unlist(markers))
-  # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `n1` and `n2` are not specified, will automatically set `n1` or `n2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `n1` and `n2` is given, the transformation will be determined by `n1` and `n2`
+  # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `t1` and `t2` are not specified, will automatically set `t1` or `t2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `t1` and `t2` is given, the transformation will be determined by `t1` and `t2`
   # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
   # gene.anno: a data.frame or data.table of gene annotation, first column should contain gene symbols/names
   # grp.anno: similar to gene.anno, group annotation, first column should contain group names

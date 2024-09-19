@@ -902,12 +902,10 @@ run.dirichreg <- function(dat, pheno, model, model.type=c("common","alternative"
   # ...: additional arguments passed to DirichletReg::DirichReg
   # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  if (!requireNamespace("DirichletReg", quietly=TRUE)) {
+  if (!require("DirichletReg", quietly=TRUE)) {
     stop("Package \"DirichletReg\" needed for this function to work.")
   }
 
-  library(DirichletReg) # the package was not attached; attach it if this function is called
-  
   model.type <- match.arg(model.type)
   cs <- colnames(dat)
   dat <- dat/rowSums(dat, na.rm=TRUE)

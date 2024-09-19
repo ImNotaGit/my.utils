@@ -405,13 +405,12 @@ rm.low.genes.sr <- function(dat, rm.low.frac.gt=0.5, low.cutoff=0, assay="RNA", 
   if (!requireNamespace("Seurat", quietly=TRUE)) {
     stop("Package \"Seurat\" needed for this function to work.")
   }
-  library(Seurat)
 
   slot <- match.arg(slot)
-  keep <- Matrix::rowMeans(GetAssayData(dat, assay=assay, slot=slot)<=low.cutoff) <= rm.low.frac.gt
+  keep <- Matrix::rowMeans(Seurat::GetAssayData(dat, assay=assay, slot=slot)<=low.cutoff) <= rm.low.frac.gt
   message(sum(keep), " rows (genes/transcripts) remaining.")
   res <- subset(dat, features=rownames(dat[[assay]])[keep])
-  if (renormalize) res <- NormalizeData(res, ...)
+  if (renormalize) res <- Seurat::NormalizeData(res, ...)
   res
 }
 
@@ -613,8 +612,10 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
   # note: the DESeq2 size factor is directly used for normalization (unlike the edgeR normalization factor, which is multiplied by library size before being used for normalization)
   # ...: passed to DESeq2::DESeq and DESeq2::results
 
-  if (!requireNamespace(c("DESeq2","BiocParallel"), quietly=TRUE)) {
-    stop("Packages \"DESeq2\" and \"BiocParallel\" needed for this function to work.")
+  for (pkg in c("DESeq2", "BiocParallel")) {
+    if (!requireNamespace(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
   }
 
   test <- match.arg(test)
@@ -1018,7 +1019,7 @@ make.pseudobulk <- function(dat, mdat, blk, ncells.cutoff=10) {
   # for numeric columns, average is taken by default; will also include nCount and nFeature (these will be properly recomputed)
 
   if ("Seurat" %in% class(dat)) {
-    if (!requireNamespace(c("Seurat"), quietly=TRUE)) {
+    if (!require(c("Seurat"), quietly=TRUE)) {
       stop("Packages \"Seurat\" needed for this function to work.")
     }
     if (missing(mdat)) mdat <- dat@meta.data
@@ -1077,7 +1078,7 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
   # ret.rmv.summ: whether to also return a summary of the removed groups and blocks due to ncells.cutoff
 
   if ("Seurat" %in% class(dat)) {
-    if (!requireNamespace(c("Seurat"), quietly=TRUE)) {
+    if (!require("Seurat", quietly=TRUE)) {
       stop("Packages \"Seurat\" needed for this function to work.")
     }
     if (identical(dat$RNA@data, dat$RNA@counts)) {
