@@ -1098,7 +1098,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
     x <- trans(x)
     if (is.numeric(x.seps)) x.sep <- trans(x.seps)
   }
-  if (from0 && any(x<0)) stop("`from0` is true but the data contains negative values.")
+  if (from0 && any(x<0, na.rm=TRUE)) stop("`from0` is true but the data contains negative values.")
   x1 <- x[is.finite(x)] # will remove na's as well
   ma <- max(x1)
   mi <- min(x1)
@@ -1209,7 +1209,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   # helper function to generate colors for a vector x
   if (is.numeric(x)) {
     if (is.null(cols)) {
-      if (any(x>0) && any(x<0)) .fcolor(x, cols=3, ...) else .fcolor(x, cols=2, ...)
+      if (any(x>0, na.rm=TRUE) && any(x<0, na.rm=TRUE)) .fcolor(x, cols=3, ...) else .fcolor(x, cols=2, ...)
     } else .fcolor(x, cols, ...)
   } else {
     # unlike na_col in Heatmap, na_col does work in HeatmapAnnotation so handling NA here is unnecessary, but I keep it anyway
