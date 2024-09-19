@@ -1019,7 +1019,7 @@ make.pseudobulk <- function(dat, mdat, blk, ncells.cutoff=10) {
   # for numeric columns, average is taken by default; will also include nCount and nFeature (these will be properly recomputed)
 
   if ("Seurat" %in% class(dat)) {
-    if (!require(c("Seurat"), quietly=TRUE)) {
+    if (!require("Seurat", quietly=TRUE)) {
       stop("Packages \"Seurat\" needed for this function to work.")
     }
     if (missing(mdat)) mdat <- dat@meta.data
