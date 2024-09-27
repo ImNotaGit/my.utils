@@ -608,7 +608,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
 }
 
 
-.plot.fracs <- function(dat, xlab=NULL, ylab="Fraction", tit=NULL, facet.tit=NULL, lab=NULL, lab.size=3, lab.frac.ge=0.05, clrs=NULL, mdat=NULL, xclrs=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, ori=c("h", "v"), no.axs=FALSE, no.nlab=FALSE, lgd.pos="bottom", lgd.tit=NULL, lgd.mgn=NULL, rs.lgd=0.1, ret.axs=FALSE, ...) {
+.plot.fracs <- function(dat, xlab=NULL, ylab="Fraction", tit=NULL, facet.tit=NULL, lab=NULL, lab.size=3, lab.frac.ge=0.05, clrs=NULL, mdat=NULL, xclrs=NULL, xord="clust", clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, ori=c("h", "v"), no.axs=FALSE, no.nlab=FALSE, lgd.pos="bottom", lgd.tit=NULL, lgd.mgn=NULL, rs.lgd=0.1, ret.axs=FALSE, ...) {
   # inner plotting function of plot.fracs for plotting proportion stacked barplots with geom_bar(..., position="fill")
   # facet.tit: if not NULL, will place everything under a single facet with this label
   # no.axs: do not plot X or Y axis depending on plot direction
@@ -616,15 +616,14 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   # the above options are used for plotting each group in grouped bar plots (the groups will be combined with cowplot::plot_grid downstream)
   # ret.axs: return only the Y axis; for dendro=TRUE this did not work well and was not used
 
-  xord <- match.arg(xord)
   dir <- match.arg(ori)
 
   if (ret.axs) no.axs <- FALSE
-  if (xord=="clust" && uniqueN(dat$x)==1) {
+  if (length(xord)==1 && xord=="clust" && uniqueN(dat$x)==1) {
     xord <- "keep"
     dendro <- FALSE # there will be an issue if there are multiple sample groups (xgrps in plot.fracs) and the other groups have >1 samples and dendro=TRUE; for now I ignore such cases
   }
-  if (xord=="clust") {
+  if (length(xord)==1 && xord=="clust") {
     mat <- dt2mat(dcast(dat, x~ygrp, value.var="y"))
     mat[is.na(mat)] <- 0
     if (is.null(clust.fun)) {
@@ -668,9 +667,13 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
         }
       }
     }
-  } else if (xord=="keep") {
+  } else if (length(xord)==1 && xord=="keep") {
     if (is.factor(dat$x)) xlvls <- levels(dat$x) else xlvls <- unique(dat$x)
-  } else xlvls <- levels(factor(dat$x))
+  } else if (length(xord)==1 && xord=="default") {
+    xlvls <- levels(factor(dat$x))
+  } else if (setequal(xord, as.character(dat$x))) {
+    xlvls <- xord
+  } else stop("Invalid `xord`.")
   xlvls <- xlvls[xlvls %in% dat$x]
   if (dir=="h") xlvls <- rev(xlvls)
 
@@ -781,7 +784,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   } else p
 }
 
-plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=NULL, xvar=NULL, ygrp=NULL, yvar=NULL, lab=NULL, lab.size=3, lab.frac.ge=0.05, mdat=NULL, mdat.xvar=NULL, ntot=NULL, xgrp=NULL, xcol=NULL, xsep=NULL, xord=c("clust", "default", "keep"), clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, yord=c("default", "keep"), lgd.tit=NULL, lgd.pos=c("bottom", "right", "none"), rs.xgrp=NULL, rs.lgd=NULL, ori=c("h", "v"), ...) {
+plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=NULL, xvar=NULL, ygrp=NULL, yvar=NULL, lab=NULL, lab.size=3, lab.frac.ge=0.05, mdat=NULL, mdat.xvar=NULL, ntot=NULL, xgrp=NULL, xcol=NULL, xsep=NULL, xord="clust", clust.fun=NULL, dendro=TRUE, dend.scale=1, rs.dend=0.12, yord=c("default", "keep"), lgd.tit=NULL, lgd.pos=c("bottom", "right", "none"), rs.xgrp=NULL, rs.lgd=NULL, ori=c("h", "v"), ...) {
   # function for visualizing fraction data with proportion stacked bar plots (i.e. with geom_bar(..., position="fill"))
   # dat: a variable-by-sample matrix or a data.table in the long format
   # mode: whether the data values are counts or fractions
@@ -793,7 +796,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
   # xgrp: sample group, if not NULL, will plot bar plots for each group and then combine all plots with cowplot::plot_grid; provided similarly as ntot; this can be a factor and its levels determine the order of the plots
   # xcol: variable used to color the sample names (i.e. axis texts); provided similarly as xgrp; if a factor the levels will affect color mapping
   # xsep: variable used to group the sample within each plot by separating lines; provided similarly as ntot
-  # xord: sample order in each plot, "clust" for clustering (by default hclust on dist on default parameters, can also provide clust.fun, a function that takes the data matrix and returns the ordered sample names after clustering), "default" for default converting-to-factor behavior, "keep" for keeping the original order in dat
+  # xord: sample order in each plot, "clust" or "default" or "keep" or a vector of custom order, "clust" for clustering (by default hclust on dist on default parameters, can also provide clust.fun, a function that takes the data matrix and returns the ordered sample names after clustering), "default" for default converting-to-factor behavior, "keep" for keeping the original order in dat
   # dendro: if TRUE and xord="clust", show dendrogram; will be ignored if xord!="clust"
   # dend.scale: scaling of dendrogram, used to manually ensure alignment between the dendrogram and main plot (unfortunately I did not find a general way of perfect alignment automatically); if xgrp is not NULL, may provide a vector in the same length and order as the sample groups
   # rs.dend: size of dendrogram relative to main plot, provide as a single number
@@ -805,11 +808,10 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
   # ...: passed to scale_fill_?(guide=guide_legend(...))
 
   mode <- match.arg(mode)
-  xord <- match.arg(xord)
   yord <- match.arg(yord)
   dir <- match.arg(ori)
   lgd.pos <- match.arg(lgd.pos)
-  if (xord!="clust") dendro <- FALSE
+  if (length(xord)>1 || xord!="clust") dendro <- FALSE
 
   if (is.matrix(dat)) {
     if (class(dat)=="table") class(dat) <- "matrix"
