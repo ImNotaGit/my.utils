@@ -415,12 +415,17 @@ rm.low.genes.sr <- function(dat, rm.low.frac.gt=0.5, low.cutoff=0, assay="RNA", 
 }
 
 
-get.tmm.log.cpm <- function(dat, prior.count=1) {
+get.tmm.log.cpm <- function(dat, ctrl.features=NULL, prior.count=1) {
   # get log2(cpm+1) values with edgeR (TMM-normalized), from raw counts
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
 
   dge <- edgeR::DGEList(counts=dat)
-  dge <- edgeR::calcNormFactors(dge)
+  if (is.null(ctrl.features)) {
+    dge <- edgeR::calcNormFactors(dge)
+  } else {
+    norm.factors <- .calc.norm.factors.with.ctrl(dge$counts, ctrl=ctrl.features, lib.size=dge$samples$lib.size, method="TMM")
+    dge$samples$norm.factors <- norm.factors
+  }
   edgeR::cpm(dge, log=TRUE, prior.count=prior.count)
 }
 
