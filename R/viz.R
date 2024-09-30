@@ -329,6 +329,9 @@ plot.roc <- function(dat, col="blue4", rev.lgd=FALSE, lgd.tit="theshold", lab=TR
 }
 
 
+xa <- function(x, a) (1-a)*min(x[is.finite(x)]) + a*max(x[is.finite(x)]) # is.finite will ignore Inf, -Inf, NA and NaN
+
+
 cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=c(12,23,13), rlab=TRUE, lab.size=4, more.args=list()) {
 
   # summary grouped data by plotting the groups side-by-side as boxplots (w/ jitter and violin plots), and when there are 2 or 3 groups, print the wilcoxon test p values and r values between each pair of groups in the x axis title.
@@ -353,24 +356,23 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
   grps <- levels(dat$group)
   xlabs <- dat[, .(n=.N), by=group][match(grps, group), sprintf("%s\nn=%d", group, n)]
 
-  addm <- function(x, a) (1+a)*max(x[is.finite(x)])+(-a)*min(x[is.finite(x)])
   # if there are only 2 or 3 groups, do wilcoxon test for each pair of groups
   ll <- length(l)
   if (ll==2) {
     #tmp <- do.call(wilcox, c(list(value~group, dat), more.args))
     tmp <- do.call(wilcox, c(list(s1=l[[1]], s2=l[[2]]), more.args))
-    stat <- dat[, .(id=12, x1=1, x2=2, x=1.5, y=addm(value,0.1), p=tmp$pval, r=tmp$r.wilcox)]
+    stat <- dat[, .(id=12, x1=1, x2=2, x=1.5, y=xa(value,1.1), p=tmp$pval, r=tmp$r.wilcox)]
   } else if (ll==3) {
     tmp <- do.call(wilcox3, c(list(value~group, dat), more.args))
     stat <- data.table(id=numeric(0), x=numeric(0), y=numeric(0), p=numeric(0), r=numeric(0))
-    if (12 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[1:2], .(id=12, x=1.5, y=addm(value,0.1), p=tmp$pval[1], r=tmp$r.wilcox[1])])
-    if (23 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[2:3], .(id=23, x=2.5, y=addm(value,0.1), p=tmp$pval[2], r=tmp$r.wilcox[2])])
+    if (12 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[1:2], .(id=12, x=1.5, y=xa(value,1.1), p=tmp$pval[1], r=tmp$r.wilcox[1])])
+    if (23 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[2:3], .(id=23, x=2.5, y=xa(value,1.1), p=tmp$pval[2], r=tmp$r.wilcox[2])])
     if (13 %in% plab) {
-      if (length(stat$y)==0) a <- 0.1
-      else if (max(stat$y)>addm(dat$value,-0.1)) a <- 0.22
-      else if (max(stat$y)>addm(dat$value,-0.2)) a <- 0.17
-      else a <- 0.1
-      stat <- rbind(stat, data.table(id=13, x=2, y=addm(c(stat$y,dat$value),a), p=tmp$pval[3], r=tmp$r.wilcox[3]))
+      if (length(stat$y)==0) a <- 1.1
+      else if (max(stat$y)>xa(dat$value,0.9)) a <- 1.22
+      else if (max(stat$y)>xa(dat$value,0.8)) a <- 1.17
+      else a <- 1.1
+      stat <- rbind(stat, data.table(id=13, x=2, y=xa(c(stat$y,dat$value),a), p=tmp$pval[3], r=tmp$r.wilcox[3]))
     }
     stat <- merge(data.table(id=c(12,23,13), x1=c(1,2,1), x2=c(2,3,3)), stat, by="id", all=FALSE)
   }
@@ -406,7 +408,7 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
       legend.position="none")
 
   if (ll==2 || ll==3) {
-    p <- p + geom_blank(data=dat[, .(group=group[1], y=addm(c(stat$y,value),0.05))], aes(y=y))
+    p <- p + geom_blank(data=dat[, .(group=group[1], y=xa(c(stat$y,value),1.05))], aes(y=y))
     if (rlab) {
       p <- p +
         geom_text(data=stat, aes(x=x, y=y, label=lab), size=lab.size, parse=TRUE) +
@@ -476,11 +478,11 @@ mcp.groups <- function(..., ylab="Value", more.args=list()) {
 
   if (ll==2 || ll==3) {
     # stat test result data
-    stat.out <- data.table(x=mean(1:ll), y=sapply(datl, function(x) x[, 1.12*max(value[is.finite(value)])-0.12*min(value[is.finite(value)])]), strata=factor(names(stat.out), levels=names(stat.out)), s=stat.out) # is.finite will ignore Inf, -Inf, NA and NaN
+    stat.out <- data.table(x=mean(1:ll), y=sapply(datl, function(x) x[, xa(value, 1.12)]), strata=factor(names(stat.out), levels=names(stat.out)), s=stat.out)
   }
 
   # blank data used to adjust axis limits
-  blk <- dat[, .(ymax=1.2*max(value[is.finite(value)])-0.2*min(value[is.finite(value)]), group=group), by=strata] # is.finite will ignore Inf, -Inf, NA and NaN
+  blk <- dat[, .(ymax=xa(value, 1.2), group=group), by=strata]
 
   # plot summary
   p <- ggplot(dat, aes(x=group, y=value)) +
