@@ -618,13 +618,10 @@ run.wilcox <- function(dat, model, ...) {
 }
 
 
-run.cor <- function(dat, model, ...) {
-  # run cor.test
-  # dat: a data.table; model: formula for the test, e.g. y~x where x and y are the two variables to correlate with each other, note that the order doesn't matter; this format is different from that of cor.test for formula
+cor1 <- function(x, y, ...) {
+  # cor.test, return a data.table
 
   tryCatch({
-    y <- dat[[deparse(model[[2]])]]
-    x <- dat[[deparse(model[[3]])]]
     tmp <- cor.test(x, y, ...)
     res <- data.table(est=tmp$estimate, pval=tmp$p.value)
     setnames(res, "est", if (names(tmp$estimate)=="cor") "r" else names(tmp$estimate))
@@ -637,6 +634,16 @@ run.cor <- function(dat, model, ...) {
     setnames(res, "est", switch(f(...), pearson="r", kendall="tau", spearman="rho"))
     res
   })
+}
+
+
+run.cor <- function(dat, model, ...) {
+  # run cor.test
+  # dat: a data.table; model: formula for the test, e.g. y~x where x and y are the two variables to correlate with each other, note that the order doesn't matter; this format is different from that of cor.test for formula
+
+  y <- dat[[deparse(model[[2]])]]
+  x <- dat[[deparse(model[[3]])]]
+  cor1(x, y, ...)
 }
 
 
