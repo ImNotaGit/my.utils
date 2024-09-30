@@ -977,7 +977,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
 }
 
 
-sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, t1=NULL, f2=mean, t2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, w=NULL, h=NULL, ...) {
+sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, t1=NULL, f2=mean, t2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, grp.anno=NULL, gene.txt=NULL, grp.txt=NULL, grp.name="cluster", xlab=str_to_title(grp.name), flip=FALSE, lo.args=list(), ...) {
   # interactive dotplot with heatmaply for single-cell gene expression data
   # dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
   # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `t1` and `t2` are not specified, will automatically set `t1` or `t2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `t1` and `t2` is given, the transformation will be determined by `t1` and `t2`
@@ -988,6 +988,8 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   # grp.txt: similar to gene.txt, a named vector of common hovertext for each group, named by the group levels
   # grp.name: what the groups represent, e.g. "cluster"; this is used in the hovertext
   # flip: by default will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE will flip the X and Y axes (and xlab will become ylab)
+  # lo.args: pased to plotly::layout
+  # ...: passed to heatmaply
 
   for (pkg in c("heatmaply", "plotly")) {
     if (!requireNamespace(pkg, quietly=TRUE)) {
@@ -1026,7 +1028,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
     x=avg,
     node_type="scatter",
     point_size_mat=pct,
-    label_names=c("gene", grp.name, ifelse(std, "std expr", "log expr")),
+    label_names=if (flip) c(grp.name, "gene", ifelse(std, "std expr", "log expr")) else c("gene", grp.name, ifelse(std, "std expr", "log expr")),
     label_format_fun=function(...) sprintf("%.3g", ...),
     point_size_name="% expr",
     custom_hovertext=txt.mat,
@@ -1075,10 +1077,13 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
     args$subplot_heights <- c(1.5/(nr+nr1+1.5), nr1/(nr+nr1+1.5), nr/(nr+nr1+1.5))
     args$subplot_heights <- args$subplot_heights[args$subplot_heights!=0]
   }
-  if (is.null(w)) w <- 50*(nc+0.7*nc1+1)+10*nch.r+150
-  if (is.null(h)) h <- 27*(nr+nr1+1.5)+10*nch.c+50
+  if (is.null(lo.args$width)) lo.args$width <- 50*(nc+0.7*nc1+1)+10*nch.r+150
+  if (is.null(lo.args$height)) lo.args$height <- 27*(nr+nr1+1.5)+10*nch.c+50
+  if (is.null(lo.args$autosize)) lo.args$autosize <- TRUE
 
-  do.call(heatmaply::heatmaply, args) %>% plotly::layout(autosize=FALSE, width=w, height=h)
+  p <- do.call(heatmaply::heatmaply, args)
+  lo.args$p <- p
+  do.call(plotly::layout, lo.args)
 }
 
 
