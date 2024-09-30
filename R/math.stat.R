@@ -622,12 +622,21 @@ run.cor <- function(dat, model, ...) {
   # run cor.test
   # dat: a data.table; model: formula for the test, e.g. y~x where x and y are the two variables to correlate with each other, note that the order doesn't matter; this format is different from that of cor.test for formula
 
-  y <- dat[[deparse(model[[2]])]]
-  x <- dat[[deparse(model[[3]])]]
-  tmp <- cor.test(x, y, ...)
-  res <- data.table(est=tmp$estimate, pval=tmp$p.value)
-  setnames(res, "est", if (names(tmp$estimate)=="cor") "r" else names(tmp$estimate))
-  res
+  tryCatch({
+    y <- dat[[deparse(model[[2]])]]
+    x <- dat[[deparse(model[[3]])]]
+    tmp <- cor.test(x, y, ...)
+    res <- data.table(est=tmp$estimate, pval=tmp$p.value)
+    setnames(res, "est", if (names(tmp$estimate)=="cor") "r" else names(tmp$estimate))
+    res
+  }, error=function(e) {
+    message(e)
+    message("\nNA's returned.")
+    res <- data.table(est=NA_real_, pval=NA_real_)
+    f <- function(method=c("pearson", "kendall", "spearman"), ...) match.arg(method)
+    setnames(res, "est", switch(f(...), pearson="r", kendall="tau", spearman="rho"))
+    res
+  })
 }
 
 
