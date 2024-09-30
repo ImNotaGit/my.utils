@@ -170,8 +170,7 @@ wilcox <- function(s1, s2, ...) {
     data.table(r.wilcox=wilcox.r, pval=wilcox.p)
 
   }, error=function(e) {
-    message(e)
-    message("NA's returned.")
+    warning("Error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
     data.table(r.wilcox=NA_real_, pval=NA_real_)
   })
 
@@ -627,8 +626,7 @@ cor1 <- function(x, y, ...) {
     setnames(res, "est", if (names(tmp$estimate)=="cor") "r" else names(tmp$estimate))
     res
   }, error=function(e) {
-    message(e)
-    message("\nNA's returned.")
+    warning("Error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
     res <- data.table(est=NA_real_, pval=NA_real_)
     f <- function(method=c("pearson", "kendall", "spearman"), ...) match.arg(method)
     setnames(res, "est", switch(f(...), pearson="r", kendall="tau", spearman="rho"))
@@ -676,7 +674,7 @@ run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
     }
     if (keep.fit) list(fit=fit, summary=res) else res
   }, error=function(e) {
-    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
+    warning("Error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
     res <- data.table(coef=NA, se=NA, pval=NA)
     if (exists(coef) && is.vector(coef) && length(coef)>1) res <- cbind(x=coef, res)
     if (keep.fit) list(fit=e, summary=res) else res
@@ -811,7 +809,7 @@ run.multinom <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binom
     }
     if (keep.fit) list(fit=fit, summary=res) else res
   }, error=function(e) {
-    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
+    warning("Error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
     res <- data.table(y=NA, x=NA, coef=NA, se=NA, pval=NA)
     if (exists(coef) && is.vector(coef) && length(coef)==1) res[, coef:=coef]
     if (keep.fit) list(fit=e, summary=res) else res
@@ -899,7 +897,7 @@ run.survdiff <- function(dat, model = Surv(surv_days, surv_status) ~ x + y + str
     res <- data.table(exp=Exp, obs=obs, pval=p)
     if (keep.fit) list(fit=fit, summary=res) else res
   }, error=function(e) {
-    warning("Error caught by tryCatch, NA returned: ", e, call.=FALSE, immediate.=TRUE)
+    warning("Error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
     if (keep.fit) list(fit=e, summary=data.table(coef=NA, pval=NA)) else data.table(exp=NA, obs=NA, pval=NA)
   })
 }
