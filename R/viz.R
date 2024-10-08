@@ -816,7 +816,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
   if (length(xord)>1 || xord!="clust") dendro <- FALSE
 
   if (is.matrix(dat)) {
-    if (class(dat)=="table") class(dat) <- "matrix"
+    if ("table" %in% class(dat)) class(dat) <- "matrix"
     if (mode=="count") {
       ntot <- colSums(dat)
       dat <- dat/rep(colSums(dat), each=nrow(dat))

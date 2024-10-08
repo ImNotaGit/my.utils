@@ -656,16 +656,16 @@ run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
   tryCatch({
     fit <- do.call(f, args)
     tmp <- coef(summary(fit))
-    if (missing(coef) || is.null(coef)) coef <- rownames(tmp)
-    if (is.numeric(coef)) coef <- rownames(tmp)[coef]
-    if (any(!coef %in% rownames(tmp))) stop("Some `coef` not in model.")
-    res <- data.table(coef=tmp[coef, colnames(tmp) %in% c("Estimate","coef")], se=tmp[coef, colnames(tmp) %in% c("Std. Error","se(coef)")], pval=tmp[coef, colnames(tmp) %in% c("Pr(>|t|)","Pr(>|z|)")])
-    if (length(coef)>1) res <- cbind(x=coef, res)
+    if (missing(coef) || is.null(coef)) cf <- rownames(tmp) else cf <- coef
+    if (is.numeric(cf)) cf <- rownames(tmp)[cf]
+    if (any(!cf %in% rownames(tmp))) stop("Some `coef` not in model.")
+    res <- data.table(coef=tmp[cf, colnames(tmp) %in% c("Estimate","coef")], se=tmp[cf, colnames(tmp) %in% c("Std. Error","se(coef)")], pval=tmp[cf, colnames(tmp) %in% c("Pr(>|t|)","Pr(>|z|)")])
+    if (length(cf)>1) res <- cbind(x=cf, res)
     # "anova-like" test if required
     if (drop.test!="none") {
       for (d in drop) {
         tmp <- drop1(fit, as.formula(paste("~",d)), test=drop.test)
-        if (d %in% coef) {
+        if (d %in% cf) {
           res[coef==d, pval:=tmp[d, names(tmp) %in% c("Pr(>F)","Pr(>Chi)")]]
         } else {
           res <- rbind(res, data.table(coef=d, pval=tmp[d, names(tmp) %in% c("Pr(>F)","Pr(>Chi)")]), fill=TRUE)
@@ -676,7 +676,7 @@ run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
   }, error=function(e) {
     warning("Error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
     res <- data.table(coef=NA, se=NA, pval=NA)
-    if (exists(coef) && is.vector(coef) && length(coef)>1) res <- cbind(x=coef, res)
+    if (exists("cf") && is.vector(cf) && length(cf)>1) res <- cbind(x=cf, res)
     if (keep.fit) list(fit=e, summary=res) else res
   })
 }
