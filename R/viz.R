@@ -899,7 +899,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
 
   if (!is.null(xgrp)) {
     grps <- levels(mdat$grp)
-    if (length(dend.scale)==1) dend.scale <- rep(dend.scale, 3)
+    if (length(dend.scale)==1) dend.scale <- rep(dend.scale, length(grps))
     if (is.null(names(dend.scale))) names(dend.scale) <- grps
     p.list <- lapply(grps, function(i) {
       mdat1 <- mdat[grp==i]
