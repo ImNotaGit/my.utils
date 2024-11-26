@@ -776,7 +776,8 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
       cowplot::plot_grid(dend, p, nrow=1, align="h", axis="tb", rel_widths=c(rs.dend, 1), scale=c(1, dend.scale))
     } else if (dir=="v") {
       if (lgd.pos=="bottom") {
-        lgd <- cowplot::get_legend(p)
+        #lgd <- cowplot::get_legend(p)
+        lgd <- cowplot::get_plot_component(p, "guide-box-bottom", return_all=TRUE)
         p <- p + theme(legend.position="none")
         cowplot::plot_grid(p, dend, lgd, ncol=1, align="v", axis="lr", rel_heights=c(1, rs.dend, rs.lgd), scale=c(1, dend.scale, 1))
       } else {
@@ -899,7 +900,7 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
 
   if (!is.null(xgrp)) {
     grps <- levels(mdat$grp)
-    if (length(dend.scale)==1) dend.scale <- rep(dend.scale, 3)
+    if (length(dend.scale)==1) dend.scale <- rep(dend.scale, length(grps))
     if (is.null(names(dend.scale))) names(dend.scale) <- grps
     p.list <- lapply(grps, function(i) {
       mdat1 <- mdat[grp==i]
@@ -917,7 +918,8 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
     if (lgd.pos=="bottom") {
       lgd.mgn <- switch(dir, h=c(-10,10,0,0), v=c(0,10,0,0))
     } else lgd.mgn <- NULL
-    lgd <- cowplot::get_legend(.plot.fracs(dat, facet.tit="", clrs=clrs, mdat=mdat, dendro=FALSE, ori=dir, lgd.tit=lgd.tit, lgd.pos=lgd.pos, lgd.mgn=lgd.mgn, ...))
+    # lgd <- cowplot::get_legend(.plot.fracs(dat, facet.tit="", clrs=clrs, mdat=mdat, dendro=FALSE, ori=dir, lgd.tit=lgd.tit, lgd.pos=lgd.pos, lgd.mgn=lgd.mgn, ...))
+    lgd <- cowplot::get_plot_component(.plot.fracs(dat, facet.tit="", clrs=clrs, mdat=mdat, dendro=FALSE, ori=dir, lgd.tit=lgd.tit, lgd.pos=lgd.pos, lgd.mgn=lgd.mgn, ...), paste0("guide-box-", lgd.pos), return_all=TRUE)
     if (dir=="h") {
       rel[1] <- rel[1]+1
       if (dendro) {

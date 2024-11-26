@@ -656,6 +656,7 @@ run.f <- function(f, ..., coef, drop.test="none", drop=coef, keep.fit) {
   tryCatch({
     fit <- do.call(f, args)
     tmp <- coef(summary(fit))
+    rownames(tmp) <- str_replace_all(rownames(tmp), "^`|`$", "")
     if (missing(coef) || is.null(coef)) cf <- rownames(tmp) else cf <- coef
     if (is.numeric(cf)) cf <- rownames(tmp)[cf]
     if (any(!cf %in% rownames(tmp))) stop("Some `coef` not in model.")
@@ -832,7 +833,14 @@ run.clm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chi
     message(sprintf("The response variable `%s` is not a factor, will convert it to factor.", yvar))
     dat[, c(yvar):=factor(get(yvar))]
   }
-  run.f(f=clm, data=dat, formula=model, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  res <- run.f(f=clm, data=dat, formula=model, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
+  # remove extra coefficients, this is specific to clm
+  if (keep.fit) {
+    if ("x" %in% names(res$summary)) res$summary <- res$summary[!grepl("\\|", x)]
+  } else {
+    if ("x" %in% names(res)) res<- res[!grepl("\\|", x)]
+  }
+  res
 }
 
 

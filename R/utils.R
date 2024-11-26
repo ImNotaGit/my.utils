@@ -325,15 +325,16 @@ qlapply <- function(f, ..., pkgs=c(), njobs, mem=16, config=list(P="short"), fai
 }
 
 
-apply1 <- function(dat, pheno, f, ..., var.name="y", arg.name="dat", nc=1L) {
+apply1 <- function(dat, pheno, f, ..., var.name="y", arg.name="dat", ret.list=FALSE, nc=1L) {
   # dat is a gene(feature)-by-sample matrix; pheno is a data.table of sample-level covariates; this function will apply a function f (one of the run.* functions) for certain statistical testing to each gene/feature
   # each gene/feature will be added to pheno as a new column named var.name, and the resulting data will be passed to the arg.name argument of f; provide additional arguments to f in ..., for the `model` argument, omit the left-hand side (i.e. instead of y~x, write ~x as in the de.* functions)
   # e.g. apply1(mat, data.table(group=factor(sth, levels=c("control","treated"))), run.lm, model=~group, coef="grouptreated")
   # this function will rbind all f outputs, adding an "id" column of gene/feature name (using the rownames of dat or dat$expr), add BH-adjusted p value with adjust.pval() then order by padj as output
+  # if multiple coefs were returned from run.f, will return a list, each element for one coef; if a single coef, then will return a data.table, unless ret.list=TRUE
   # nc: number of cores
 
   args <- list(...)
-  args$dat <- copy(pheno)
+  args[[arg.name]] <- copy(pheno)
   if ("model" %in% names(args)) {
     args$model <- as.formula(paste(var.name, paste(as.character(args$model), collapse=" ")))
   }
@@ -346,14 +347,19 @@ apply1 <- function(dat, pheno, f, ..., var.name="y", arg.name="dat", nc=1L) {
   stopCluster(cl)
 
   if ("x" %in% names(res)) {
-    lapply(split(res, by="x"), function(x) {
+    res <- lapply(split(res, by="x"), function(x) {
       x <- adjust.pval(x[, -"x"])
       x[order(padj, pval)]
     })
   } else {
     res <- adjust.pval(res)
-    res[order(padj, pval)]
+    res <- res[order(padj, pval)]
+    if (ret.list) {
+      res <- list(res)
+      if ("coef" %in% names(args)) names(res) <- args$coef
+    }
   }
+  res
 }
 
 
