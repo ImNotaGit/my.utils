@@ -363,7 +363,7 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
     tmp <- do.call(wilcox, c(list(s1=l[[1]], s2=l[[2]]), more.args))
     stat <- dat[, .(id=12, x1=1, x2=2, x=1.5, y=xa(value,1.1), p=tmp$pval, r=tmp$r.wilcox)]
   } else if (ll==3) {
-    tmp <- do.call(wilcox3, c(list(value~group, dat), more.args))
+    tmp <- do.call(run.wilcox, c(list(dat, value~group), more.args))
     stat <- data.table(id=numeric(0), x=numeric(0), y=numeric(0), p=numeric(0), r=numeric(0))
     if (12 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[1:2], .(id=12, x=1.5, y=xa(value,1.1), p=tmp$pval[1], r=tmp$r.wilcox[1])])
     if (23 %in% plab) stat <- rbind(stat, dat[group %in% levels(group)[2:3], .(id=23, x=2.5, y=xa(value,1.1), p=tmp$pval[2], r=tmp$r.wilcox[2])])
@@ -462,14 +462,14 @@ mcp.groups <- function(..., ylab="Value", more.args=list()) {
   ll <- length(l)
   if (ll==2) {
     stat.out <- sapply(datl, function(x) {
-      stat <- do.call(wilcox, c(list(value~group, x), more.args))
+      stat <- do.call(run.wilcox, c(list(x, value~group), more.args))
       stat.p <- stat$pval
       stat.r <- stat$r.wilcox
       sprintf("wilcox\np=%.2g\nr=%.2g", stat.p, stat.r)
     })
   } else if (ll==3) {
     stat.out <- sapply(datl, function(x) {
-      stat <- do.call(wilcox3, c(list(value~group, x), more.args))
+      stat <- do.call(run.wilcox, c(list(x, value~group), more.args))
       stat.p <- stat$pval
       stat.r <- stat$r.wilcox
       paste0("wilcox (12,23,13)\np=", paste(sprintf("%.2g", stat.p), collapse="; "), "\nr=", paste(sprintf("%.2g", stat.r), collapse="; "))
