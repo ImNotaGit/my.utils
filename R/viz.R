@@ -293,6 +293,10 @@ plot.roc <- function(dat, col="blue4", rev.lgd=FALSE, lgd.tit="theshold", lab=TR
   # lgd.tit: title of the legend for color; rev.lgd: whether to reverse legend scale
   # lab: whether to add label of AUROC value and CI; if so, lab.size and lab.posi specify the size and position
 
+  if (!requireNamespace("pROC", quietly=TRUE)) {
+    stop("Package \"pROC\" needed for this function to work.")
+  }
+
   dat.xy <- as.data.table(pROC::coords(dat$roc, "all", transpose=FALSE))[order(-specificity, sensitivity)]
 
   p <- ggplot(dat.xy) + scale_x_reverse() +
@@ -362,6 +366,7 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
     #tmp <- do.call(wilcox, c(list(value~group, dat), more.args))
     tmp <- do.call(wilcox, c(list(s1=l[[1]], s2=l[[2]]), more.args))
     stat <- dat[, .(id=12, x1=1, x2=2, x=1.5, y=xa(value,1.1), p=tmp$pval, r=tmp$r.wilcox)]
+    if (rlab) stat[, lab:=latex2exp::TeX(sprintf("$\\overset{r_{rb}=%.2g}{P=%.2g}$", r, p), output="character")] else stat[, lab:=sprintf("P=%.2g", p)]
   } else if (ll==3) {
     tmp <- do.call(run.wilcox, c(list(dat, value~group), more.args))
     stat <- data.table(id=numeric(0), x=numeric(0), y=numeric(0), p=numeric(0), r=numeric(0))
@@ -374,9 +379,10 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
       else a <- 1.1
       stat <- rbind(stat, data.table(id=13, x=2, y=xa(c(stat$y,dat$value),a), p=tmp$pval[3], r=tmp$r.wilcox[3]))
     }
+    stat[, padj:=p.adjust(p, "BH")]
     stat <- merge(data.table(id=c(12,23,13), x1=c(1,2,1), x2=c(2,3,3)), stat, by="id", all=FALSE)
+    if (rlab) stat[, lab:=latex2exp::TeX(sprintf("$\\overset{r_{rb}=%.2g}{P_{adj}=%.2g}$", r, padj), output="character")] else stat[, lab:=latex2exp::TeX(sprintf("$P_{adj}=%.2g$", padj))]
   }
-  if (rlab) stat[, lab:=latex2exp::TeX(sprintf("$\\overset{P=%.2g}{r_{rb}=%.2g}$", p, r), output="character")] else stat[, lab:=sprintf("P=%.2g", p)]
   
   # plot summary
   formaty <- function(y) sprintf("%.2g", y)
@@ -465,14 +471,14 @@ mcp.groups <- function(..., ylab="Value", more.args=list()) {
       stat <- do.call(run.wilcox, c(list(x, value~group), more.args))
       stat.p <- stat$pval
       stat.r <- stat$r.wilcox
-      sprintf("wilcox\np=%.2g\nr=%.2g", stat.p, stat.r)
+      sprintf("wilcox\nr=%.2g\nP=%.2g", stat.r, stat.p)
     })
   } else if (ll==3) {
     stat.out <- sapply(datl, function(x) {
       stat <- do.call(run.wilcox, c(list(x, value~group), more.args))
       stat.p <- stat$pval
       stat.r <- stat$r.wilcox
-      paste0("wilcox (12,23,13)\np=", paste(sprintf("%.2g", stat.p), collapse="; "), "\nr=", paste(sprintf("%.2g", stat.r), collapse="; "))
+      paste0("wilcox (12,23,13)\nr=", paste(sprintf("%.2g", stat.r), collapse="; "), "\nP=", paste(sprintf("%.2g", stat.p), collapse="; "))
     })
   } #else stat.out <- rep("", length(datl))
 
