@@ -156,6 +156,10 @@ convert.gene.id <- function(x, from=c("ensembl.gene","ensembl.tx","ensembl.prot"
   # use.biomart: for now only TRUE is implemented
   # return a data.table with two columns "from" and "to"; "from" is in the order of x (if keep=TRUE, otherwise from will only contain the items with successful matches and in no particular order); "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA (if keep=TRUE, otherwise these won't be included)
 
+  if (!requireNamespace("biomaRt", quietly=TRUE)) {
+    stop("Package \"biomaRt\" needed for this function to work.")
+  }
+
   #from <- match.arg(from)
   #to <- match.arg(to)
   #species <- match.arg(species)
@@ -227,6 +231,10 @@ convert.gene.id2 <- function(x, from=c("symbol","ensembl.gene","ensembl.tx","ens
   # x: vector of ids
   # return a data.table with two columns "from" and "to"; "from" is in the order of x (if keep=TRUE, otherwise from will only contain the items with successful matches and in no particular order); "to" is a vector for 1:1 mapping or a list of 1:many mapping; unmapped items will be NA (if keep=TRUE, otherwise these won't be included)
 
+  if (!requireNamespace("biomaRt", quietly=TRUE)) {
+    stop("Package \"biomaRt\" needed for this function to work.")
+  }
+
   #from <- match.arg(from)
   #to <- match.arg(to)
   #from.sp <- match.arg(from.sp)
@@ -292,6 +300,10 @@ convert.gset.species <- function(gs, from="hs", to="mm") {
   # convert gene sets containing gene symbols from on species to another, by default from human to mice
   # gs: gene sets in a list
 
+  if (!requireNamespace("biomaRt", quietly=TRUE)) {
+    stop("Package \"biomaRt\" needed for this function to work.")
+  }
+
   gns <- unique(unlist(gs))
   from1 <- from
   to1 <- to
@@ -309,6 +321,10 @@ qlapply <- function(f, ..., pkgs=c(), njobs, mem=16, config=list(P="short"), fai
   # other items in ... should be either other constant arguments passed to f or variables to be exported to f (i.e. those not defined within f)
   # mem is memory per job in G; could also specify in config as list(mem=xx, ...), in which case the mem argument will be ignored
   # the names "P" and "mem" used in config correspond to my current template in use (data/.clustermq.sge.tmpl)
+
+  if (!requireNamespace("clustermq", quietly=TRUE)) {
+    stop("Package \"clustermq\" needed for this function to work.")
+  }
 
   l <- list(...)
   x <- l[1]

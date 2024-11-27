@@ -16,6 +16,12 @@ get.gene.lengths <- function(txdb=NULL, fn=NULL, format=c("auto","gff3","gtf")) 
   # txdb: txdb object; fn: file name; format: format of file
   # use summed length of non-overlapping exons per gene (the "union" method)
 
+  for (pkg in c("GenomicFeatures", "GenomicRanges", "IRanges")) {
+    if (!requireNamespace(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
+  }
+
   if (is.null(txdb)) {
   	if (is.null(fn)) stop("Need to provide either exdb or fn.")
   	format <- match.arg(format)
@@ -32,6 +38,10 @@ get.gene.lengths <- function(txdb=NULL, fn=NULL, format=c("auto","gff3","gtf")) 
 rm.batch.eff <- function(...) {
   # remove the known batch effect in expression data. should pass in arbitrary numbers of gene-by-sample expression matrices. return a list of batch effect-corrected data, in the original order.
 
+  if (!requireNamespace("sva", quietly=TRUE)) {
+    stop("Package \"sva\" needed for this function to work.")
+  }
+
   tmp <- list(...)
   combined.dat <- cbind(...)
   batch.id <- rep(1:length(tmp), sapply(tmp, ncol))
@@ -46,10 +56,16 @@ prep.array <- function(dat, log="default", norm.method="loess") {
   # log: whether to log2(x+1) data; "default" automatically determines whether to transform
   # norm.method: either "loess" or "quantile"; "loess" won't work if the data contains NA, so if any NA will first set these to 0 with warning
 
+  for (pkg in c("limma", "affy")) {
+    if (!requireNamespace(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
+  }
+
   if (length(class(dat))==1 && class(dat)=="ExpressionSet") {
     # for featureData, fix potential improper column names so that later limma::topTable can use them
-    fvarLabels(dat) <- make.names(fvarLabels(dat))
-    mat <- exprs(dat)
+    Biobase::fvarLabels(dat) <- make.names(Biobase::fvarLabels(dat))
+    mat <- Biobase::exprs(dat)
   } else if (is.matrix(dat)) mat <- dat
 
   # log2 transform
@@ -82,7 +98,7 @@ prep.array <- function(dat, log="default", norm.method="loess") {
 
   # return
   if (class(dat)=="ExpressionSet") {
-    exprs(dat) <- mat
+    Biobase::exprs(dat) <- mat
     return(dat)
   } else if (is.matrix(dat)) return(mat)
 }
@@ -254,6 +270,12 @@ voom <- function(dat, pheno, model=~., design, quantile=FALSE, ...) {
   # ...: passed to edgeR::calcNormFactors (e.g. `method`) and limma::voom
   # return a list(voom, design, genes), where voom is the limma::voom() output, i.e. an EList object, design is the design matrix, and genes is rownames(dat)
 
+  for (pkg in c("limma", "edgeR")) {
+    if (!requireNamespace(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
+  }
+
   if (missing(design) || is.null(design)) {
     if (missing(pheno) || is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
     pheno <- as.data.table(pheno)
@@ -295,6 +317,10 @@ de.limma <- function(dat, pheno=NULL, model=~., design=NULL, coef, contrast, red
   # gene.colname: the column name for gene symbols in fData(dat) if dat is an ExpressionSet; if TRUE then will try to get gene symbols automatically from fData(dat); if FALSE then will not try to get gene symbols; gene symbols will be added to the returned DE table
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, summary=de.res), otherwise return de.res
   # ...: passed to limma::lmFit, limma::eBayes and limma::topTable, e.g. `robust` and `trend` for limma::eBayes, set these to TRUE for log-transformed RNA-seq data (but for RNA-seq doing DE with read count data using other methods can be more recommended)
+
+  if (!requireNamespace("limma", quietly=TRUE)) {
+    stop("Package \"limma\" needed for this function to work.")
+  }
 
   if (length(class(dat))==1 && class(dat)=="ExpressionSet") {
     mat <- exprs(dat)
@@ -381,6 +407,10 @@ rm.low.genes <- function(dat, rm.low.frac.gt=0.5, count.cutoff=10) {
   # remove genes with low count
   # dat: gene-by-sample expression matrix of raw counts, or an "eset" i.e. list(expr, pheno, geneid)
 
+  if (!requireNamespace("edgeR", quietly=TRUE)) {
+    stop("Package \"edgeR\" needed for this function to work.")
+  }
+
   is.eset <- is.list(dat) && all(c("expr","pheno") %in% names(dat))
   if (is.eset) {
     dat0 <- dat
@@ -418,6 +448,10 @@ rm.low.genes.sr <- function(dat, rm.low.frac.gt=0.5, low.cutoff=0, assay="RNA", 
 get.tmm.log.cpm <- function(dat, ctrl.features=NULL, prior.count=1) {
   # get log2(cpm+1) values with edgeR (TMM-normalized), from raw counts
   # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+
+  if (!requireNamespace("edgeR", quietly=TRUE)) {
+    stop("Package \"edgeR\" needed for this function to work.")
+  }
 
   dge <- edgeR::DGEList(counts=dat)
   if (is.null(ctrl.features)) {

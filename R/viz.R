@@ -182,7 +182,7 @@ plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, color=NULL, shape=NULL
     if (is.null(label.subset)) dat[, lab.flag:=TRUE] else dat[label.subset, lab.flag:=TRUE]
     dat[, lab.color:="black"]
     if (label.outliers && length(id.outliers)>0) dat[id.outliers, c("outlier", "lab.color"):=list(TRUE, "red2")]
-    p <- p + geom_text_repel(data=dat[lab.flag==TRUE], aes_string(label=label), color=dat[lab.flag==TRUE, lab.color], size=label.size)
+    p <- p + ggrepel::geom_text_repel(data=dat[lab.flag==TRUE], aes_string(label=label), color=dat[lab.flag==TRUE, lab.color], size=label.size)
   }
 
   if (do.plot) print(p)
@@ -233,7 +233,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
     scale_x_continuous("PC", breaks=1:length(res$sdev)) + scale_y_continuous("% Total Variance", n.breaks=10) +
     geom_vline(xintercept=elbow, color="grey", linetype="dashed") +
     geom_point() +
-    geom_text_repel(data=var.dat[!(PC==1 & what=="Cumulative")], aes(x=PC, y=y, label=sprintf("%.1f",y)), color="grey10", size=label.size) +
+    ggrepel::geom_text_repel(data=var.dat[!(PC==1 & what=="Cumulative")], aes(x=PC, y=y, label=sprintf("%.1f",y)), color="grey10", size=label.size) +
     geom_line(aes(group=what)) +
     scale_color_manual(values=c("grey10","darkblue")) +
     theme_classic() +
@@ -266,9 +266,9 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
     geom_path(data=circ, aes(x=x, y=y), color="grey", linetype="dashed") +
     geom_hline(yintercept=0, color="grey", linetype="dashed") +
     geom_vline(xintercept=0, color="grey", linetype="dashed")
-  if (loadings[, any(!rev)]) pld <- pld + geom_segment(data=loadings[rev==FALSE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(length=unit(5,"pt"), type="closed"), lwd=0.7, alpha=0.7)
-  if (loadings[, any(rev)]) pld <- pld + geom_segment(data=loadings[rev==TRUE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(angle=150, length=unit(6,"pt")), lwd=0.7, alpha=0.7)
-  pld <- pld + geom_text_repel(data=loadings, aes(x=x, y=y, label=lab), size=label.size) +
+  if (loadings[, any(!rev)]) pld <- pld + geom_segment(data=loadings[rev==FALSE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(length=grid::unit(5,"pt"), type="closed"), lwd=0.7, alpha=0.7)
+  if (loadings[, any(rev)]) pld <- pld + geom_segment(data=loadings[rev==TRUE], aes_string(x=0, y=0, xend="x", yend="y", color=ld.color), arrow=arrow(angle=150, length=grid::unit(6,"pt")), lwd=0.7, alpha=0.7)
+  pld <- pld + ggrepel::geom_text_repel(data=loadings, aes(x=x, y=y, label=lab), size=label.size) +
     coord_equal() +
     theme_classic()
 
@@ -580,7 +580,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
     if (is.null(x) || length(x)==0) {
       element_blank()
     } else if (is.numeric(x)) {
-      if (is.null(u)) element_text(size=x) else unit(x, u)
+      if (is.null(u)) element_text(size=x) else grid::unit(x, u)
     } else if (is.list(x)) {
       do.call(element_text, x)
     } else if (length(x)==1 && is.na(x)) {
@@ -716,7 +716,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
       legend.position=lgd.pos,
       legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
       legend.text=element_text(size=8),
-      legend.key.size=unit(8,"pt"),
+      legend.key.size=grid::unit(8,"pt"),
       legend.box.margin=if (lgd.pos=="bottom") margin(c(-10,10,0,0)) else margin()
     )
   } else if (dir=="v") {
@@ -744,7 +744,7 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
       legend.position=lgd.pos,
       legend.title=if (is.null(lgd.tit)) element_blank() else element_text(size=8.5),
       legend.text=element_text(size=8),
-      legend.key.size=unit(8,"pt"),
+      legend.key.size=grid::unit(8,"pt"),
       legend.box.margin=if (!is.null(lgd.mgn)) margin(lgd.mgn) else if (lgd.pos=="bottom") margin(c(-10,10,0,0)) else margin()
     )
   }
@@ -752,20 +752,20 @@ thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
   if (ret.axs) {
     if (dir=="h") {
       axs <- gtable::gtable_filter(ggplotGrob(p), 'axis-b|xlab-b', trim=FALSE)
-      axs <- gtable::gtable_add_padding(axs, unit(c(0,0,6,0), "pt"))
+      axs <- gtable::gtable_add_padding(axs, grid::unit(c(0,0,6,0), "pt"))
     } else if (dir=="v") {
       axs <- gtable::gtable_filter(ggplotGrob(p), 'axis-l|ylab-l', trim=FALSE)
-      axs <- gtable::gtable_add_padding(axs, unit(c(0,0,0,6), "pt"))
+      axs <- gtable::gtable_add_padding(axs, grid::unit(c(0,0,0,6), "pt"))
     }
     if (dendro) {
       if (dir=="h") {
         daxs <- gtable::gtable_filter(ggplotGrob(dend), 'axis-b|xlab-b', trim=FALSE)
-        daxs <- gtable::gtable_add_padding(daxs, unit(c(0,0,6,0), "pt"))
-        axs <- arrangeGrob(axs, left=daxs, widths=c(1, 0.15))
+        daxs <- gtable::gtable_add_padding(daxs, grid::unit(c(0,0,6,0), "pt"))
+        axs <- gridExtra::arrangeGrob(axs, left=daxs, widths=c(1, 0.15))
       } else if (dir=="v") {
         daxs <- gtable::gtable_filter(ggplotGrob(dend), 'axis-l|ylab-l', trim=FALSE)
-        daxs <- gtable::gtable_add_padding(daxs, unit(c(0,1,0,6), "pt"))
-        axs <- arrangeGrob(axs, bottom=daxs, heights=c(1, 0.1))
+        daxs <- gtable::gtable_add_padding(daxs, grid::unit(c(0,1,0,6), "pt"))
+        axs <- gridExtra::arrangeGrob(axs, bottom=daxs, heights=c(1, 0.1))
       }
     }
     return(axs)
@@ -815,6 +815,11 @@ plot.fracs <- function(dat, mode=c("count", "frac"), xlab, ylab="Fraction", tit=
   dir <- match.arg(ori)
   lgd.pos <- match.arg(lgd.pos)
   if (length(xord)>1 || xord!="clust") dendro <- FALSE
+  if (dendro) {
+    if (!requireNamespace("ggdendro", quietly=TRUE)) {
+      stop("Package \"ggdendro\" needed for this function to work.")
+    }
+  }
 
   if (is.matrix(dat)) {
     if ("table" %in% class(dat)) class(dat) <- "matrix"
@@ -1246,7 +1251,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
         s <- sizes[1]
       } else s <- (sizes[1] + sizes[length(sizes)])/2
     } else s <- approx(xs, sizes, x, rule=2, ties="ordered")$y
-    if (is.na(s)) NA else s*unit(3, "mm")
+    if (is.na(s)) NA else s*grid::unit(3, "mm")
   }
 }
 
@@ -1261,6 +1266,10 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
   # colf.anno: a function for generating annotation colors
   # cellf: pass a custom cellf replacing that defined in this function, the env of cellf will be changed to the runtime env of this function, so can refer to mat, smat, rf, colf, etc.
   # clust: if to cluster neither columns nor rows, set to ""
+
+  if (!requireNamespace("ComplexHeatmap", quietly=TRUE)) {
+    stop("Package \"ComplexHeatmap\" needed for this function to work.")
+  }
 
   lgd.pos <- match.arg(lgd.pos)
   lgd.ori <- match.arg(lgd.ori)
@@ -1297,13 +1306,13 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
     if (is.null(cellf)) {
       if (sp) {
         cellf <- function(j, i, x, y, width, height, fill) {
-          grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col=NA, fill=NA))
-          grid.circle(x=x, y=y, r=rf(i, j), gp=gpar(fill=colf(mat[i, j]), col=if (smat[i, j]>s.seps[1]) "black" else NA))
+          grid::grid.rect(x=x, y=y, width=width, height=height, gp=grid::gpar(col=NA, fill=NA))
+          grid::grid.circle(x=x, y=y, r=rf(i, j), gp=grid::gpar(fill=colf(mat[i, j]), col=if (smat[i, j]>s.seps[1]) "black" else NA))
         }
       } else {
         cellf <- function(j, i, x, y, width, height, fill) {
-          grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col=NA, fill=NA))
-          grid.circle(x=x, y=y, r=rf(i, j), gp=gpar(fill=colf(mat[i, j]), col=NA))
+          grid::grid.rect(x=x, y=y, width=width, height=height, gp=grid::gpar(col=NA, fill=NA))
+          grid::grid.circle(x=x, y=y, r=rf(i, j), gp=grid::gpar(fill=colf(mat[i, j]), col=NA))
         }
       }
     } else {
@@ -1331,70 +1340,70 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
   if (!is.null(y.anno)) {
     y.anno <- y.anno[match(rownames(mat), y.anno[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
     row.cols <- lapply(y.anno, colf.anno)
-    row.ha <- HeatmapAnnotation(
+    row.ha <- ComplexHeatmap::HeatmapAnnotation(
       which="row", df=y.anno, col=row.cols, na_col="white",
-      simple_anno_size=unit(2.5,"mm"), gap=unit(2,"points"),
-      show_annotation_name=TRUE, annotation_name_side=if (is.null(x.anno)) "bottom" else "top", annotation_name_gp=gpar(fontsize=9, fontface="plain", srt=40), annotation_name_rot=40,
-      annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"))
+      simple_anno_size=grid::unit(2.5,"mm"), gap=grid::unit(2,"points"),
+      show_annotation_name=TRUE, annotation_name_side=if (is.null(x.anno)) "bottom" else "top", annotation_name_gp=grid::gpar(fontsize=9, fontface="plain", srt=40), annotation_name_rot=40,
+      annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=grid::unit(3, "mm"), grid_height=grid::unit(3, "mm"), title_gp=grid::gpar(fontsize=9, fontface="plain"), labels_gp=grid::gpar(fontsize=8, fontface="plain"))
     )
   } else row.ha <- NULL
 
   if (!is.null(x.anno)) {
     x.anno <- x.anno[match(colnames(mat), x.anno[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
     col.cols <- lapply(x.anno, colf.anno)
-    col.ha <- HeatmapAnnotation(
+    col.ha <- ComplexHeatmap::HeatmapAnnotation(
       which="column", df=x.anno, col=col.cols, na_col="white",
-      simple_anno_size=unit(2.5,"mm"), gap=unit(2,"points"),
-      show_annotation_name=TRUE, annotation_name_side="left", annotation_name_gp=gpar(fontsize=9, fontface="plain"),
-      annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"))
+      simple_anno_size=grid::unit(2.5,"mm"), gap=grid::unit(2,"points"),
+      show_annotation_name=TRUE, annotation_name_side="left", annotation_name_gp=grid::gpar(fontsize=9, fontface="plain"),
+      annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=grid::unit(3, "mm"), grid_height=grid::unit(3, "mm"), title_gp=grid::gpar(fontsize=9, fontface="plain"), labels_gp=grid::gpar(fontsize=8, fontface="plain"))
     )
   } else col.ha <- NULL
 
-  hm <- Heatmap(mat1,
+  hm <- ComplexHeatmap::Heatmap(mat1,
     col=colf,
     na_col="grey50",
     name=name,
-    width=ncol(mat)*unit(if (any(grepl("\n", colnames(mat)))) 7 else 5, "mm"),
-    height=nrow(mat)*unit(5, "mm"),
+    width=ncol(mat)*grid::unit(if (any(grepl("\n", colnames(mat)))) 7 else 5, "mm"),
+    height=nrow(mat)*grid::unit(5, "mm"),
     row_title=ylab,
-    row_title_gp=gpar(fontsize=10),
+    row_title_gp=grid::gpar(fontsize=10),
     row_title_side=pos.map[str_extract(lab.pos, "[lr]")],
-    row_names_gp=gpar(fontsize=9),
+    row_names_gp=grid::gpar(fontsize=9),
     row_names_side=pos.map[str_extract(lab.pos, "[lr]")],
     cluster_rows=grepl("y", clust),
     row_dend_side=if (grepl("y", clust)) pos.map[str_extract(dend.pos, "[lr]")] else "left",
-    row_dend_width=unit(7, "mm"),
-    row_dend_gp=gpar(lwd=0.2),
+    row_dend_width=grid::unit(7, "mm"),
+    row_dend_gp=grid::gpar(lwd=0.2),
     column_title=xlab,
-    column_title_gp=gpar(fontsize=10),
+    column_title_gp=grid::gpar(fontsize=10),
     column_title_side=pos.map[str_extract(lab.pos, "[tb]")],
-    column_names_gp=gpar(fontsize=9),
+    column_names_gp=grid::gpar(fontsize=9),
     column_names_side=pos.map[str_extract(lab.pos, "[tb]")],
     column_names_rot=40,
     cluster_columns=grepl("x", clust),
     column_dend_side=if (grepl("x", clust)) pos.map[str_extract(dend.pos, "[tb]")] else "top",
-    column_dend_height=unit(7, "mm"),
-    column_dend_gp=gpar(lwd=0.2),
+    column_dend_height=grid::unit(7, "mm"),
+    column_dend_gp=grid::gpar(lwd=0.2),
     border=TRUE,
-    border_gp=gpar(lwd=0.2),
-    rect_gp=if (is.null(smat)) gpar(col=NA) else gpar(type="none"),
+    border_gp=grid::gpar(lwd=0.2),
+    rect_gp=if (is.null(smat)) grid::gpar(col=NA) else grid::gpar(type="none"),
     cell_fun=cellf,
     left_annotation=if (grepl("l", anno.pos)) row.ha else NULL,
     right_annotation=if (grepl("r", anno.pos)) row.ha else NULL,
     top_annotation=if (grepl("t", anno.pos)) col.ha else NULL,
     bottom_annotation=if (grepl("b", anno.pos)) col.ha else NULL,
     show_heatmap_legend=is.null(smat),
-    heatmap_legend_param=list(direction=lgd.ori, grid_width=unit(3, "mm"), grid_height=unit(3, "mm"), title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain")),
+    heatmap_legend_param=list(direction=lgd.ori, grid_width=grid::unit(3, "mm"), grid_height=grid::unit(3, "mm"), title_gp=grid::gpar(fontsize=9, fontface="plain"), labels_gp=grid::gpar(fontsize=8, fontface="plain")),
     ...
   )
 
   if (!is.null(smat)) {
     if (pack.lgd=="default") pack.lgd <- switch(lgd.pos, bottom="horizontal", right="vertical") else pack.lgd <- switch(pack.lgd, h="horizontal", v="vertical")
-    lgd.c <- Legend(col_fun=colf, title=name, title_gp=gpar(fontsize=9, fontface="plain"), labels_gp=gpar(fontsize=8, fontface="plain"), direction=lgd.ori)
+    lgd.c <- ComplexHeatmap::Legend(col_fun=colf, title=name, title_gp=grid::gpar(fontsize=9, fontface="plain"), labels_gp=grid::gpar(fontsize=8, fontface="plain"), direction=lgd.ori)
     if (sp) {
       tmp <- seq(0, max(smat, na.rm=TRUE), len=4)[-1]
       if (all(tmp<s.seps[1])) lbs <- tmp else if (all(tmp>=s.seps[1])) lbs <- c(-log10(0.2), tmp) else lbs <- sort(c(s.seps, tmp))
-      grs <- lapply(lbs, function(i) function(x, y, w, h) grid.circle(x, y, r=rf(x=i), gp=gpar(fill="grey", col=if (i>=s.seps[1]) "black" else NA)))
+      grs <- lapply(lbs, function(i) function(x, y, w, h) grid::grid.circle(x, y, r=rf(x=i), gp=grid::gpar(fill="grey", col=if (i>=s.seps[1]) "black" else NA)))
       lbs <- ifelse(lbs==s.seps[1], paste0("<", p.cut), ifelse(lbs==-log10(0.2), paste0(">", p.cut), ifelse(lbs==-log10(2.2e-16), "<2.2e-16", sprintf("%.1g", 10^(-lbs)))))
       tmp <- !duplicated(lbs)
       lbs <- lbs[tmp]
@@ -1411,13 +1420,13 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
         if (s.from0) lbs <- c(0, s.seps, max(smat[is.finite(smat)])) else lbs <- c(min(smat[is.finite(smat)]), s.seps, max(smat[is.finite(smat)]))
       }
       lbs <- unique(lbs)
-      grs <- lapply(lbs, function(i) function(x, y, w, h) grid.circle(x, y, r=rf(x=i), gp=gpar(fill="grey", col=NA)))
+      grs <- lapply(lbs, function(i) function(x, y, w, h) grid::grid.circle(x, y, r=rf(x=i), gp=grid::gpar(fill="grey", col=NA)))
       lbs <- sprintf("%.1f", lbs)
     }
-    lgd.s <- Legend(title=sname, title_gp=gpar(fontsize=9, fontface="plain"), labels=lbs, labels_gp=gpar(fontsize=8, fontface="plain"), graphics=grs, nrow=switch(lgd.ori, horizontal=1, vertical=NULL), ncol=switch(lgd.ori, horizontal=NULL, vertical=1), by_row=lgd.ori=="horizontal", direction=lgd.ori)
-    lgd <- packLegend(lgd.c, lgd.s, direction=pack.lgd)
-    draw(hm, column_title=NULL, heatmap_legend_side=anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
-  } else draw(hm, heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=anno.lgd.pos, legend_grouping="original")
+    lgd.s <- ComplexHeatmap::Legend(title=sname, title_gp=grid::gpar(fontsize=9, fontface="plain"), labels=lbs, labels_gp=grid::gpar(fontsize=8, fontface="plain"), graphics=grs, nrow=switch(lgd.ori, horizontal=1, vertical=NULL), ncol=switch(lgd.ori, horizontal=NULL, vertical=1), by_row=lgd.ori=="horizontal", direction=lgd.ori)
+    lgd <- ComplexHeatmap::packLegend(lgd.c, lgd.s, direction=pack.lgd)
+    ComplexHeatmap::draw(hm, column_title=NULL, heatmap_legend_side=anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
+  } else ComplexHeatmap::draw(hm, heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=anno.lgd.pos, legend_grouping="original")
 }
 
 
@@ -1437,6 +1446,10 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   # xlab: if missing will set to `grp`, to not show xlab set it to NULL
   # flip: when FALSE will plot gene-by-group dot plot, and xlab is for group; if flip=TRUE (default) will flip the X and Y axes (and xlab will become ylab)
   # ...: passed to plot.hm
+
+  if (!requireNamespace("ComplexHeatmap", quietly=TRUE)) {
+    stop("Package \"ComplexHeatmap\" needed for this function to work.")
+  }
 
   if (is.null(t1) && is.null(t2) && std) {
     if (is.null(blk)) t2 <- scale else t1 <- scale
@@ -1502,8 +1515,8 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
       on.exit(rm(.tmp.cellf.env, envir=.GlobalEnv))
       cellf <- function(j, i, x, y, width, height, fill) {
         fmat <- .tmp.cellf.env$fmat
-        grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col=NA, fill=NA))
-        grid.circle(x=x, y=y, r=rf(i, j), gp=gpar(fill=colf(mat[i, j]), col=if (fmat[i, j]==1) "red2" else if (fmat[i, j]==-1) "blue2" else NA))
+        grid::grid.rect(x=x, y=y, width=width, height=height, gp=grid::gpar(col=NA, fill=NA))
+        grid::grid.circle(x=x, y=y, r=rf(i, j), gp=grid::gpar(fill=colf(mat[i, j]), col=if (fmat[i, j]==1) "red2" else if (fmat[i, j]==-1) "blue2" else NA))
       }
     }
   }

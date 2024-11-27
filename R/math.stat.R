@@ -102,6 +102,10 @@ gmm <- function(X, G=1:9, xlab="Value", bins=50, do.plot=TRUE, ...) {
   # do.plot: whether to print the plot
   # ...: passed to mclust::Mclust
 
+  if (!requireNamespace("mclust", quietly=TRUE)) {
+    stop("Package \"mclust\" needed for this function to work.")
+  }
+
   capture.output(fit <- mclust::Mclust(X, G=G, ...), type="output")
   k <- fit$G
   mu <- fit$parameters$mean
@@ -126,7 +130,7 @@ gmm <- function(X, G=1:9, xlab="Value", bins=50, do.plot=TRUE, ...) {
       geom_histogram(aes(y=..density..), fill="grey", alpha=0.6, position="identity", bins=bins) +
       theme_classic()
     dnorm1 <- function(lambda, ...) lambda*dnorm(...)
-    clrs <- brewer.pal(name="Set1", n=k)
+    clrs <- RColorBrewer::brewer.pal(name="Set1", n=k)
     for (i in 1:k) {
       p <- p + geom_function(fun=dnorm1, args=list(lambda=lambda[i], mean=mu[i], sd=sigma[i]), size=0.6, color=clrs[i])
     }
@@ -309,6 +313,10 @@ get.roc1 <- function(x, pos, neg, x.names=NULL, dir=c(1,-1), ci=FALSE, msg=TRUE,
   # return a list(roc=<output of pROC::roc>, ci=<output of pROC::ci.se>, auc=<auc value>, auc.ci=<vector of 2: 95%CI of auc>)
   # ... passed to pROC::roc
 
+  if (!requireNamespace("pROC", quietly=TRUE)) {
+    stop("Package \"pROC\" needed for this function to work.")
+  }
+
   if (!is.null(x.names)) names(x) <- x.names
   else if (is.null(names(x))) stop("x needs to be named.")
   pos <- pos[pos %in% names(x)]
@@ -338,6 +346,10 @@ get.roc <- function(x, pos, neg, x.names=NULL, curve=TRUE, ...) {
   # curve: if false, return only AUROC value, otherwise return the object from PRROC::roc.curve(curve=TRUE)
   # ... passed to PRROC::roc.curve
 
+  if (!requireNamespace("PRROC", quietly=TRUE)) {
+    stop("Package \"PRROC\" needed for this function to work.")
+  }
+
   if (!is.null(x.names)) names(x) <- x.names
   else if (is.null(names(x))) stop("x needs to be named.")
   pos <- pos[pos %in% names(x)]
@@ -355,6 +367,10 @@ get.prc <- function(x, pos, neg, x.names=NULL, curve=TRUE, ...) {
   # neg: a vector of the names of negative cases
   # curve: if false, return only AUPRC value, otherwise return the object from PRROC::pr.curve(curve=TRUE)
   # ... passed to PRROC::pr.curve
+
+  if (!requireNamespace("PRROC", quietly=TRUE)) {
+    stop("Package \"PRROC\" needed for this function to work.")
+  }
 
   if (!is.null(x.names)) names(x) <- x.names
   else if (is.null(names(x))) stop("x needs to be named.")
@@ -457,6 +473,12 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
   # padj.cutoff: only cases with BH-adjusted P < this value will be returned
   # simple: use fisher.simple() for p value, and simple approximate the odds ratio as ad/bc in the 2x2 table
 
+  for (pkg in c("doParallel", "foreach")) {
+    if (!require(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
+  }
+
   # helper function for one pair of ret sets
   enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff, simple) {
     r1 <- ref1[ref1 %in% bg1]
@@ -516,6 +538,12 @@ enrich.combo.sets2 <- function(fg1, fg2, refs1, refs2=refs1, bg1, bg2, nc=1L, ov
   # overlap.cutoff: only cases where number of overlap between "foreground" and "reference" set > this value will be kept for P value adjustment
   # padj.cutoff: only cases with BH-adjusted P < this value will be returned
   # simple: use fisher.simple() for p value, and simple approximate the odds ratio as ad/bc in the 2x2 table
+
+  for (pkg in c("doParallel", "foreach")) {
+    if (!require(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
+  }
 
   # helper function for one pair of ret sets
   enrich.combo.set <- function(fg1, fg2, ref1, ref2, ref1.name, ref2.name, bg1, bg2, overlap.cutoff, simple) {
@@ -723,7 +751,10 @@ run.lmer <- function(dat, model = y ~ x + (x|cluster), coef="x", ..., keep.fit=F
   # ...: additional variables to be used for fitting the model, if they appear in the model formula and are not in dat; additional arguments to lmer() can also be provided here, so need to be careful to avoid any name conflicts
   # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  library(lmerTest) # the package was imported but not attached; attach it if this function is called
+  if (!require("lmerTest", quietly=TRUE)) {
+    stop("Package \"lmerTest\" needed for this function to work.")
+  }
+
   run.f(f=lmer, data=dat, formula=model, ..., coef=coef, keep.fit=keep.fit)
 }
 
@@ -759,8 +790,12 @@ run.multinom <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binom
   # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
   # these packages were imported but not attached; attach it if this function is called
-  library(nnet)
-  library(lmtest)
+  for (pkg in c("nnet", "lmtest")) {
+    if (!require(pkg, quietly=TRUE)) {
+      stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
+    }
+  }
+
   drop.test <- match.arg(drop.test)
   environment(model) <- environment() # fix for error when calling summary(fit) below
   tryCatch({
@@ -825,7 +860,10 @@ run.clm <- function(dat, model = y ~ x*z, coef="x", ..., drop.test=c("none","Chi
   # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(clm()), i.e. based on Wald test that may be problematic for small sample size
   # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  library(ordinal) # the package was imported but not attached; attach it if this function is called
+  if (!require("ordinal", quietly=TRUE)) {
+    stop("Package \"ordinal\" needed for this function to work.")
+  }
+
   drop.test <- match.arg(drop.test)
   # make sure the response (dependent) variable is a factor
   yvar <- as.character(model)[2]
@@ -851,7 +889,10 @@ run.cox <- function(dat, model = Surv(surv_days, surv_status) ~ x + age + strata
   # drop.test: whether to use p value from a test based on nested models (e.g. likelihood ratio test, i.e. "Chisq") by dropping the variable of interest as given in drop; if not ("none") the p value will be those from summary(coxph()), i.e. based on Wald test that may be problematic for small sample size
   # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the coefficient and p value for the variable/term of interest
 
-  library(survival) # the package was imported but not attached; attach it if this function is called
+  if (!require("survival", quietly=TRUE)) {
+    stop("Package \"survival\" needed for this function to work.")
+  }
+
   drop.test <- match.arg(drop.test)
   run.f(f=coxph, data=dat, formula=model, ..., coef=coef, drop.test=drop.test, drop=drop, keep.fit=keep.fit)
 }
@@ -888,7 +929,9 @@ run.survdiff <- function(dat, model = Surv(surv_days, surv_status) ~ x + y + str
   # ...: additional variables for survival::survdiff
   # keep.fit: if TRUE, will return list(fit, summary), else simply return summary, which is a data.table containing the "observed" and "expected" values and p value
 
-  library(survival) # the package was imported but not attached; attach it if this function is called
+  if (!require("survival", quietly=TRUE)) {
+    stop("Package \"survival\" needed for this function to work.")
+  }
 
   res <- tryCatch({
     fit <- survdiff(model, dat, ...)
