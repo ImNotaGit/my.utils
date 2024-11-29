@@ -194,7 +194,7 @@ wilcox3 <- function(s1, s2, s3, snames=NULL, ...) {
   } else lab <- c("2vs1", "3vs2", "3vs1")
   res <- cbind(comparison=lab, rbind(w12, w23, w13))
   res[, padj:=p.adjust(pval, "BH")]
-  return(res)
+  res[]
 }
 
 
@@ -620,28 +620,33 @@ gsea <- function(dat, gsets, x="log.fc", id="id", seed=1, nc=1L, ...) {
 }
 
 
-run.wilcox <- function(dat, model, ...) {
-  # run Wilcoxon test for 2 or 3 groups, return a data.table with the p value and the rank-biserial correlation for the test.
+run.wilcox <- function(dat, model, cps=".", ...) {
+  # run Wilcoxon test, return a data.table with the p value and the rank-biserial correlation for the test.
   # dat: a data.table; model: formula for the wilcoxon test, e.g. y~x where y contains the data values and x defines the groups
+  # cps: between-group comparisons to test, "." test for all (unordered) pairs of groups, or a character vector with its elements in the format of "groupA vs groupB"
 
-  # NOTE: although I can pass dat and model directly to wilcox.test, I choose to extract the groups explicitly, based on the order of the levels of the group factor (again, although this is the same default behavior of wilcox.test).
-
-  group <- factor(dat[[deparse(model[[3]])]]) # make sure group is a factor. the order of levels won't change if it is already a factor
-  value <- dat[[deparse(model[[2]])]]
+  group <- factor(dat[[as.character(model)[3]]]) # make sure group is a factor. the order of levels won't change if it is already a factor
+  value <- dat[[as.character(model)[2]]]
   grps <- levels(group)
-  if (length(grps)==2) {
-    s1 <- value[group==grps[1]]
-    s2 <- value[group==grps[2]]
-    res <- wilcox(s1, s2, ...)
-  } else if (length(grps)==3) {
-    s1 <- value[group==grps[1]]
-    s2 <- value[group==grps[2]]
-    s3 <- value[group==grps[3]]
-    res <- wilcox3(s1, s2, s3, snames=grps, ...)
-  } else {
-    stop("The number of groups to be compared should be 2 or 3.")
+  if (length(cps)==1 && cps==".") {
+    tmp <- outer(grps, grps, paste, sep=" vs ")
+    cps <- tmp[lower.tri(tmp)]
   }
-  res
+  cps <- setNames(str_split(cps, " vs "), cps)
+  tryCatch({
+    if (length(cps)==0) stop("There is only one group.")
+    if (any(!unlist(cps) %in% grps)) stop("Some of the groups specified in `cps` are not in `dat`.")
+    res <- rbindlist(lapply(cps, function(x) {
+      s1 <- value[group==x[2]]
+      s2 <- value[group==x[1]]
+      res <- wilcox(s1, s2, ...)
+    }), idcol="comparison")
+    res[, padj:=p.adjust(pval, "BH")]
+    res[]
+  }, error=function(e) {
+    warning("run.wilcox error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
+    data.table(comparison=names(cps), r.wilcox=NA_real_, pval=NA_real_, padj=NA_real_)
+  })
 }
 
 
