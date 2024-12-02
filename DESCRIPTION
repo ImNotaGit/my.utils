@@ -58,6 +58,7 @@ Suggests:
     fgsea,
     clustermq,
     rmote,
+    ggsignif,
     ggdendro,
     ComplexHeatmap,
     heatmaply,

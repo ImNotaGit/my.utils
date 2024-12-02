@@ -508,7 +508,7 @@ mcp.groups <- function(..., ylab="Value", more.args=list()) {
 }
 
 
-plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, geoms=c("box","violin","jitter"), plab=c(12,23,13), rlab=TRUE, lab.size=4, more.args=list()) {
+plot.groups.old <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, geoms=c("box","violin","jitter"), plab=c(12,23,13), rlab=TRUE, lab.size=4, more.args=list()) {
   # cp.groups and mcp.groups, but for the "long format" table as used by ggplot2 by default
 
   if (!is.factor(dat[[xvar]])) dat[[xvar]] <- factor(dat[[xvar]])
@@ -524,6 +524,253 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, geoms
     x <- lapply(ii, function(i) {lapply(jj, function(j) dat[[yvar]][dat[[xvar]]==i & dat[[facet]]==j])})
     mcp.groups(x, ylab=ylab, more.args=more.args)
   }
+}
+
+
+plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", geom=c("b", "j"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", ...) {
+  # new plot.groups for plotting arbitrary numbers of groups possibly with stratification (facets) and between-group comparison labels
+  # dat: data.table
+  # xvar, yvar, facet: character; yvar can contain multiple values or can be "." to stand for all other columns in `dat` (for wide-format `dat`), or specify `facet` (for long-format `dat`)
+  # geom: "b" (boxplot), "j" (jitter), "v" (violin)
+  # add.n: whether to add sample size per group in x labels and legend labels
+  # cps: character vector, between-group comparisons to label, each element should have format "groupA vs groupB", or can be "." for all possible pairs of comparisons (un-ordered)
+  # dat.cp: data.table (with a column named "comparison", in the same format as `cps`) or list of data.tables (with names of the list in the same format as `cps`), the `facet` variable should be present (when `yvar` contains multiple values, will create the `facet` variable named "facet", in this case a column named "facet" should be present in dat.cp), otherwise will look for a column named "id" and use it as the facet variable
+  # when `dat.cp` is NULL and `cps` is not, will compare the groups in `cps` and add the results as labels; by default (`test`="default") comparing using wilcoxon tests (`run.wilcox`); if `dat.cp` is given will use it for labeling regardelss of `cps`, but `cps` can be used to specify a subset to label, and if `cps` is not given will use all results in `dat.cp` that is compatible with `dat`
+  # lab, lab1: glue::glue formatting strings with latex formatting support, these format `dat.cp` columns to get the labels, if `lab1` is given, will use it for the top label and use `lab` for all the rest labels; can contain shorthand "f(x, fmt)" which is equivalent to sprintf(fmt, x); e.g. "P_{{adj}}={f(padj, '%.2g')}"; use "\n" for new line; "default" is coef/log.fc and Padj, or can be the shorthands "coef", "log.fc", "pval", "padj"
+  # lab.subset, flag: expression strings for subsetting comparison results; only the `lab.subset` subset will be labeled, among which the `flag` subset will be highlighted in red
+  # y.inc: increase in y for each line of label (if `lab` contains multiple lines, this roughly corresponds to the height of each line of label)
+
+  # y variables
+  if (length(yvar)==1 && yvar==".") yvar <- setdiff(names(dat), xvar)
+  if (length(yvar)>1) {
+    dat <- melt(dat, id.vars=xvar, measure.vars=yvar, variable.name="facet", value.name="y")
+    facet <- "facet"
+    yvar <- "y"
+  } else dat <- copy(dat)
+  # x levels
+  if (!is.factor(dat[[xvar]])) {
+    message("`xvar` in `dat` is not a factor, this may cause issues in ordering of the groups.")
+    dat[, c(xvar):=factor(get(xvar))]
+  }
+  xs <- levels(dat[[xvar]])
+  if (anyNA(dat[[xvar]])) {
+    xs <- c(xs, "NA")
+    dat[, c(xvar):=factor(ifelse(is.na(get(xvar)), "NA", as.character(get(xvar))), levels=xs)]
+  }
+  if (add.n) {
+    if (is.null(facet)) {
+      # add per-group sample size to x label
+      tmp <- dat[, .(n=.N), by=c(xvar)][, setNames(sprintf("%s\n(n=%d)", get(xvar), n), get(xvar))]
+      xlabs <- tmp[xs]
+    } else {
+      # if there are multiple facets, the sample size can be different per facet; but for now just to make it simple, use mean sample size across facets
+      tmp <- dat[, .(n=.N), by=c(facet, xvar)][, .(n=round(mean(n))), by=c(xvar)][, setNames(sprintf("%s\n(n=%d)", get(xvar), n), get(xvar))]
+      xlabs <- tmp[xs]
+    }
+  } else xlabs <- xs
+  # all comparisons
+  if (!is.null(cps) && length(cps)==1 && cps==".") {
+    tmp <- outer(xs, xs, paste, sep=" vs ")
+    cps <- tmp[lower.tri(tmp)]
+    if (length(cps)==3) cps <- cps[c(1,3,2)] else if (length(cps)==4) cps <- cps[c(1,4,6,5,2,3)]
+  }
+  # default comparisons with my customized wilcoxon test
+  if (!is.null(cps) && is.null(dat.cp) && is.character(test) && test=="default") {
+    if (!is.null(facet)) {
+      tmp <- split(dat, by=facet)
+      tmp <- tmp[sapply(tmp, nrow)>0] # drop levels
+      dat.cp <- rbindlist(lapply(tmp, function(d) do.call(run.wilcox, c(list(dat=d, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))), idcol=facet)
+    } else {
+      dat.cp <- do.call(run.wilcox, c(list(dat=dat, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))
+    }
+    if (length(lab)==1 && lab=="default") {
+      lab <- "{f(r.wilcox, '%.2g')}\n({f(padj, '%.2g')})"
+      lab1 <- "r_{{rb}}={f(r.wilcox, '%.2g')}\n(P_{{adj}}={f(padj, '%.2g')})"
+    }
+  }
+  # data of comparison results
+  if (!is.null(dat.cp)) {
+    if (!is.data.table(dat.cp)) {
+      dat.cp <- rbindlist(dat.cp, idcol="comparison")
+    } else if (!"comparison" %in% names(dat.cp)) {
+      stop("`dat.cp` should contain a column named \"comparison\".")
+    } else dat.cp <- copy(dat.cp)
+    if (readj.pval && "pval" %in% names(dat.cp)) dat.cp[, padj:=p.adjust(pval, "BH")]
+    if (!is.null(facet) && !facet %in% names(dat.cp)) {
+      if ("id" %in% names(dat.cp)) dat.cp[, c(facet):=id] else stop(sprintf("`facet` variable (\"%s\") not present in `dat.cp`.", facet))
+    }
+    if (is.character(lab.subset)) dat.cp <- dat.cp[eval(parse(text=lab.subset))==TRUE]
+  }
+  if (!is.null(dat.cp) && nrow(dat.cp)>0) {
+    f <- function(x, fmt) sprintf(fmt, x)
+    if (length(lab)==1) {
+      if (lab=="default") {
+        if ("coef" %in% names(dat.cp)) {
+          lab <- "{f(coef, '%.2g')}"
+          lab1 <- "Coef={f(coef, '%.2g')}"
+        } else if ("log.fc" %in% names(dat.cp)) {
+          lab <- "{f(log.fc, '%.2g')}"
+          lab1 <- "logFC={f(log.fc, '%.2g')}"
+        } else lab <- lab1 <- NULL
+        if ("padj" %in% names(dat.cp)) {
+          if (is.null(lab)) {
+            lab <- "{f(padj, '%.2g')}"
+            lab1 <- "P_{{adj}}={f(padj, '%.2g')}"
+          } else {
+            lab <- paste0(lab, "\n({f(padj, '%.2g')})")
+            lab1 <- paste0(lab1, "\n(P_{{adj}}={f(padj, '%.2g')})")
+          }
+        } else if ("pval" %in% names(dat.cp)) {
+          if (is.null(lab)) {
+            lab <- "{f(pval, '%.2g')}"
+            lab1 <- "P={f(pval, '%.2g')}"
+          } else {
+            lab <- paste0(lab, "\n({f(pval, '%.2g')})")
+            lab1 <- paste0(lab1, "\n(P={f(pval, '%.2g')})")
+          }
+        }
+      } else if (lab=="coef") {
+        lab <- "{f(coef, '%.2g')}"
+        lab1 <- "Coef={f(coef, '%.2g')}"
+      } else if (lab=="log.fc") {
+        lab <- "{f(log.fc, '%.2g')}"
+        lab1 <- "logFC={f(log.fc, '%.2g')}"
+      } else if (lab=="pval") {
+        lab <- "{f(pval, '%.2g')}"
+        lab1 <- "P={f(pval, '%.2g')}"
+      } else if (lab=="padj") {
+        lab <- "{f(padj, '%.2g')}"
+        lab1 <- "P_{{adj}}={f(padj, '%.2g')}"
+      }
+    }
+    lab <- paste0("$", str_split(lab, "\n")[[1]], "$")
+    if (!is.null(lab1)) lab1 <- paste0("$", str_split(lab1, "\n")[[1]], "$")
+    if (!is.null(cps)) {
+      tmp <- str_split(cps, " vs ")
+      cps <- c(rbind(cps, sapply(tmp, function(x) paste(rev(x), collapse=" vs "))))
+      dat.cp <- dat.cp[comparison %in% cps]
+      cps <- cps[cps %in% dat.cp$comparison]
+    } else cps <- unique(dat.cp$comparison)
+    tmp <- as.data.table(str_split(dat.cp$comparison, " vs ", simplify=TRUE))
+    setnames(tmp, c("x1", "x2"))
+    dat.cp <- cbind(dat.cp, tmp)
+    if (!is.null(facet)) dat.cp[, fa:=get(facet)] else dat.cp <- cbind(dat.cp, fa=1)
+    # group comparison labels into different y levels for display
+    xmap <- setNames(1:length(xs), xs)
+    ov <- function(a, b) max(xmap[a])>min(xmap[b]) && min(xmap[a])<max(xmap[b])
+    cpsl <- str_split(cps, " vs ")
+    tmp <- sapply(cpsl, function(x) any(!x %in% xs))
+    if (any(tmp)) {
+      message(sprintf("One or both groups involved in these comparisons are not in data:\n%s.", paste(cps[tmp], collapse=", ")))
+      cps <- cps[!tmp]
+      cpsl <- cpsl[!tmp]
+    }
+    tmp <- cpsl[-1]
+    cpsl <- list(cpsl[1])
+    i <- 1
+    while (length(tmp)>0) {
+      if (any(sapply(cpsl[[i]], ov, b=tmp[[1]]))) i <- i+1
+      if (length(cpsl)==i) cpsl[[i]] <- c(cpsl[[i]], tmp[1]) else cpsl[[i]] <- tmp[1]
+      tmp <- tmp[-1]
+    }
+    cpsl <- rbindlist(lapply(cpsl, function(x) data.table(comparison=sapply(x, function(xx) paste(xx, collapse=" vs ")))), idcol="lvl")
+    # calculate y values for each level
+    if (!is.null(facet)) {
+      tmp <- dat[, .(ymin=min(get(yvar)[is.finite(get(yvar))]), ymax=max(get(yvar)[is.finite(get(yvar))])), by=c(facet)]
+      tmp[, fa:=get(facet)]
+    } else {
+      tmp <- dat[, .(ymin=min(get(yvar)[is.finite(get(yvar))]), ymax=max(get(yvar)[is.finite(get(yvar))]), fa=1)]
+    }
+    ya <- function(ymin, ymax, a) (1-a)*ymin + a*ymax
+    y.inc <- y.inc*length(lab)
+    ylv <- rbindlist(lapply(1:uniqueN(cpsl$lvl), function(i) {
+      res <- do.call(cbind, lapply(1:length(lab), function(j) {
+        tmp[, .(y=ya(ymin, ymax, 1.05+y.inc*(i-1)+y.inc*0.9*(j-1)/length(lab)))]
+      }))
+      setnames(res, paste0("y", length(lab):1))
+      cbind(res, tmp[, .(fa)])
+    }), idcol="lvl")
+    # combine all comparison data for plotting
+    tmp <- merge(cpsl, ylv, by="lvl", allow.cartesian=TRUE)
+    dat.cp <- merge(dat.cp, tmp, by=c("fa", "comparison"))
+    for (i in 1:length(lab)) {
+      dat.cp[, c(paste0("lab", i)):=latex2exp::TeX(str_glue_data(.SD, lab[i]), output="character")]
+      if (!is.null(lab1)) {
+        # str_glue doesn't work inside data.table when there is subsetting...
+        tmp <- str_glue_data(dat.cp[lvl==max(lvl)], lab1[i])
+        dat.cp[lvl==max(lvl), c(paste0("lab", i)):=latex2exp::TeX(tmp, output="character")]
+      }
+    }
+    if (is.character(flag)) {
+      dat.cp[, flag:=eval(parse(text=flag))]
+      flag <- TRUE
+    }
+  }
+
+  p <- ggplot(dat, aes_string(x=xvar, y=yvar)) +
+    scale_x_discrete(labels=xlabs, name=xlab)
+  if (!is.null(facet)) p <- p + facet_wrap(as.formula(sprintf("~%s", facet)), scales=scales, ncol=ncol)
+  if (any(c("jitter","j") %in% geom)) {
+    if (any(c("violin","v","box","b") %in% geom)) {
+      p <- p + geom_jitter(aes_string(color=col), size=0.8, width=0.15, height=0, alpha=0.4)
+    } else {
+      p <- p +
+        geom_jitter(aes_string(color=col), size=0.8, width=0.2, height=0, alpha=0.8) +
+        stat_summary(aes_string(color=col), fun.data=mean_se, geom="pointrange") # plot a line with central dot for mean+/-se
+    }
+  }
+  if (any(c("violin","v") %in% geom)) {
+    if (any(c("box","b") %in% geom)) {
+      p <- p + geom_violin(aes_string(color=col), scale="width", width=0.7, alpha=0)
+    } else {
+      p <- p + geom_violin(aes_string(color=col, fill=fill), scale="width", width=0.7, alpha=0.3)
+    }
+  }
+  if (any(c("box","b") %in% geom)) {
+    p <- p + geom_boxplot(aes_string(color=col), width=if (any(c("violin","v") %in% geom)) 0.3 else 0.6, size=0.8, alpha=0, outlier.size=if (any(c("jitter","j") %in% geom)) 0 else 0.8)
+  }
+  if (is.character(pal)) {
+    if (length(pal)==1) {
+      p <- p +
+        { if (!is.na(col) && col==xvar) scale_color_brewer(labels=xlabs, palette=pal) else scale_color_brewer(palette=pal) } +
+        { if (!is.na(fill) && fill==xvar) scale_fill_brewer(labels=xlabs, palette=pal) else scale_fill_brewer(palette=pal) }
+    } else {
+      p <- p +
+        { if (!is.na(col) && col==xvar) scale_color_manual(labels=xlabs, values=pal) else scale_color_manual(values=pal) } +
+        { if (!is.na(fill) && fill==xvar) scale_fill_manual(labels=xlabs, values=pal) else scale_fill_manual(values=pal) }
+    }
+  } else p <- p + pal
+  if (!is.null(dat.cp) && nrow(dat.cp)>0) {
+    if (isTRUE(flag)) p <- p + ggnewscale::new_scale_color()
+    for (i in 1:length(lab)) {
+      # note: when there are multiple lines of labels per comparison, I add a geom_bracket for each line but hide the brackets of upper lines with size=0
+      p <- p + geom_bracket(data=dat.cp, aes_string(xmin="x1", xmax="x2", y.position=paste0("y", i), label=paste0("lab", i), color=if (isTRUE(flag)) "flag" else "grey20"), size=0.5*(i==length(lab)), label.size=lab.size, type="expression")
+    }
+    if (isTRUE(flag)) p <- p + scale_color_manual(values=c(`TRUE`="red2", `FALSE`="grey20"), guide="none")
+  } else if (is.null(dat.cp) && !is.null(cps)) {
+    if (!requireNamespace("ggsignif", quietly=TRUE)) {
+      stop("Package \"ggsignif\" needed for this function to work.")
+    }
+    cps <- str_split(cps, " vs ")
+    p <- p + ggsignif::geom_signif(comparisons=cps, test=test, test.args=test.args, textsize=lab.size, step_increase=y.inc, parse=TRUE, ...)
+  }
+  p <- p + scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18))) + theme_classic()
+  if (is.null(facet)) {
+    p <- p + theme(
+      axis.text.x=element_text(angle=40, hjust=1),
+      panel.grid.major.y=element_line(size=0.5),
+      legend.position="none",
+      plot.margin=margin(0,0,0,5*max(nchar(xs)-(10+10*(0:(length(xs)-1))),0))
+    )
+  } else {
+    p <- p + theme(
+      axis.text.x=element_blank(),
+      panel.grid.major.y=element_line(size=0.5),
+      legend.title=element_blank(),
+      legend.position=lgd.pos
+    )
+  }
+  p
 }
 
 
