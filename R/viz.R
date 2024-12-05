@@ -654,6 +654,8 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     tmp <- as.data.table(str_split(dat.cp$comparison, " vs ", simplify=TRUE))
     setnames(tmp, c("x1", "x2"))
     dat.cp <- cbind(dat.cp, tmp)
+    dat.cp[, x1:=factor(x1, levels=xs)]
+    dat.cp[, x2:=factor(x2, levels=xs)]
     if (!is.null(facet)) dat.cp[, fa:=get(facet)] else dat.cp <- cbind(dat.cp, fa=1)
     # group comparison labels into different y levels for display
     xmap <- setNames(1:length(xs), xs)
