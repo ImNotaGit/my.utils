@@ -1510,7 +1510,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   }
 }
 
-plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL, y.anno=NULL, name=" ", sname=" ", cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, ...) {
+plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, tit=NULL, x.anno=NULL, y.anno=NULL, name=" ", sname=" ", cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, ...) {
   # plot heatmap (or dot plot) with ComplexHeatmap
   # mat: for heatmap color; smat: for dot size, if provided will do dot plot; will assume that mat and smat have the same dimensions and row/column orders
   # sp: if TRUE, will assume that smat contains adjusted P values; can provide significance cutoff in s.seps, e.g. s.seps=0.05
@@ -1680,8 +1680,8 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, x.anno=NULL,
     }
     lgd.s <- ComplexHeatmap::Legend(title=sname, title_gp=grid::gpar(fontsize=9, fontface="plain"), labels=lbs, labels_gp=grid::gpar(fontsize=8, fontface="plain"), graphics=grs, nrow=switch(lgd.ori, horizontal=1, vertical=NULL), ncol=switch(lgd.ori, horizontal=NULL, vertical=1), by_row=lgd.ori=="horizontal", direction=lgd.ori)
     lgd <- ComplexHeatmap::packLegend(lgd.c, lgd.s, direction=pack.lgd)
-    ComplexHeatmap::draw(hm, column_title=NULL, heatmap_legend_side=anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
-  } else ComplexHeatmap::draw(hm, heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=anno.lgd.pos, legend_grouping="original")
+    ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
+  } else ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=anno.lgd.pos, legend_grouping="original")
 }
 
 
