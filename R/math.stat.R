@@ -218,10 +218,7 @@ make.confus.mat <- function(qset, refset, uset, margins=TRUE) {
   # set margins=TRUE to add margins
 
   # if qset is empty or NA, return NA
-  if (length(qset)==0) {
-    warning("In make.confus.mat: qset has zero length. NA returned.\n")
-    return(NA)
-  } else if (length(qset)==1 && is.na(qset)) {
+  if (length(qset)==1 && is.na(qset)) {
     warning("In make.confus.mat: qset is NA. NA returned.\n")
     return(NA)
   }
@@ -392,10 +389,14 @@ enrich.test <- function(qset=NULL, refset=NULL, uset=NULL, confus.mat=NULL, ...)
   } else conf <- confus.mat[1:2, 1:2]
 
   # fisher's exact test
-  res <- fisher.test(conf, ...)
-  res$table <- conf
-  res$summary <- data.table(OR=res$estimate, pval=res$p.value)
-  return(res)
+  summ <- tryCatch({
+    res <- fisher.test(conf, ...)
+    data.table(OR=res$estimate, pval=res$p.value)
+  }, error=function(e) {
+    warning("Error caught by tryCatch, NA returned:\n", as.character(e), call.=FALSE, immediate.=TRUE)
+    data.table(OR=NA_real_, pval=NA_real_)
+  })
+  list(table=conf, summary=summ)
 }
 
 

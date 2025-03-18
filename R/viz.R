@@ -1264,7 +1264,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   if (is.null(t1) && is.null(t2) && std) {
     if (is.null(blk)) t2 <- scale else t1 <- scale
   }
-  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
+  tmp <- summ.expr.by.grp(dat=dat, gns=gns, mdat=mdat, grp=grp, blk=blk, exp=exp, f1=f1, t1=t1, f2=f2, t2=t2, pct=TRUE, expr.cutoff=expr.cutoff, ncells.cutoff=ncells.cutoff, ret.no.t=TRUE, ret.grp.sizes=TRUE)
   # todo: use ret.no.t=TRUE to also plot a non-scaled plot (provide this as an option)
   avg <- tmp$avg
   #avg[is.na(avg)] <- 0
@@ -1378,19 +1378,22 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
     d3 <- 3*mad(x1)
     hi <- m+d3
     lo <- m-d3
-    if (hi>ma) hi <- ma else hi <- max(x1[x1<hi])
-    if (lo<mi) lo <- mi else lo <- min(x1[x1>lo])
-    if (from0) {
-      if (q) xs <- c(quantile(c(0,x1[x1<=hi]), seq(0, 1, len=length(ys))), ma) else xs <- c(seq(0, hi, len=length(ys)), ma)
-      if (!is.null(ys.m3d)) ys <- c(ys, ys.m3d) else ys <- c(ys, ys[length(ys)])
-    } else {
-      if (q) xs <- c(mi, quantile(x1[x1>=lo & x1<=hi], seq(0, 1, len=length(ys))), ma) else xs <- c(mi, seq(lo, hi, len=length(ys)), ma)
-      if (!is.null(ys.m3d)) {
-        if (length(ys.m3d)!=2) stop("`ys.m3d` should have a length of 2.")
-        ys <- c(ys.m3d[1], ys, ys.m3d[2])
-      } else ys <- c(ys[1], ys, ys[length(ys)])
-    }
-  } else {
+    if (hi>ma) hi <- ma else hi <- max(x1[x1<=hi])
+    if (lo<mi) lo <- mi else lo <- min(x1[x1>=lo])
+    if (lo!=hi) {
+      if (from0) {
+        if (q) xs <- c(quantile(c(0,x1[x1<=hi]), seq(0, 1, len=length(ys))), ma) else xs <- c(seq(0, hi, len=length(ys)), ma)
+        if (!is.null(ys.m3d)) ys <- c(ys, ys.m3d) else ys <- c(ys, ys[length(ys)])
+      } else {
+        if (q) xs <- c(mi, quantile(x1[x1>=lo & x1<=hi], seq(0, 1, len=length(ys))), ma) else xs <- c(mi, seq(lo, hi, len=length(ys)), ma)
+        if (!is.null(ys.m3d)) {
+          if (length(ys.m3d)!=2) stop("`ys.m3d` should have a length of 2.")
+          ys <- c(ys.m3d[1], ys, ys.m3d[2])
+        } else ys <- c(ys[1], ys, ys[length(ys)])
+      }
+    } else m3d <- FALSE
+  }
+  if (!m3d) {
     if (q) xs <- quantile(x1, seq(0, 1, len=length(ys))) else xs <- seq(mi, ma, len=length(ys))
     if (from0) xs[1] <- 0
   }
@@ -1510,17 +1513,23 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   }
 }
 
-plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, tit=NULL, x.anno=NULL, y.anno=NULL, name=" ", sname=" ", cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, ...) {
+plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, txt="xy", x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, ...) {
   # plot heatmap (or dot plot) with ComplexHeatmap
   # mat: for heatmap color; smat: for dot size, if provided will do dot plot; will assume that mat and smat have the same dimensions and row/column orders
   # sp: if TRUE, will assume that smat contains adjusted P values; can provide significance cutoff in s.seps, e.g. s.seps=0.05
   # name and sname are legend labels for mat and smat respectively
+  # txt: "xy" show both column and row names (texts)
   # x.anno and y.anno: data.frame or data.table, first column should contain IDs (i.e. col/rownames of mat), each subsequent column is a variable used to annotate the columns/rows
+  # x.grp and y.grp: vectors or data.frame to specify the groupings of columns and rows (passed to row_split and column_split), respectively; the heatmap will be split into the corresponding groups; if vectors, should have the correct order; if data.frame or data.table, should follow the format of x.anno and y.anno
+  # by default if providing x.grp/y.grp but not xlab/ylab, group names will be displayed on the plot; it's possible to hide the group names by setting xlab or ylab to NULL (but then no x/y title can be displayed)
   # cols to trans passed to .fcolor for heatmap color
   # sizes to s.trans passed to .fsize for dot size
   # colf.anno: a function for generating annotation colors
   # cellf: pass a custom cellf replacing that defined in this function, the env of cellf will be changed to the runtime env of this function, so can refer to mat, smat, rf, colf, etc.
   # clust: if to cluster neither columns nor rows, set to ""
+  # x.clust, y.clust: provide hclust or dendrogram objects if want to customize clustering
+  # dend.pos: dendrogram side; to hide row/column dendrogram, omit the corresponding side
+  # w, h: width and height per heatmap cell in mm; set to NULL to get default behavior
 
   if (!requireNamespace("ComplexHeatmap", quietly=TRUE)) {
     stop("Package \"ComplexHeatmap\" needed for this function to work.")
@@ -1614,29 +1623,42 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, xlab=NULL, ylab=NULL, tit=NULL, x.
     )
   } else col.ha <- NULL
 
+  if (!is.null(y.grp) && !is.vector(y.grp)) {
+    y.grp <- y.grp[match(rownames(mat), y.grp[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
+  }
+  if (!is.null(x.grp) && !is.vector(x.grp)) {
+    x.grp <- x.grp[match(colnames(mat), x.grp[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
+  }
+
   hm <- ComplexHeatmap::Heatmap(mat1,
     col=colf,
     na_col="grey50",
     name=name,
-    width=ncol(mat)*grid::unit(if (any(grepl("\n", colnames(mat)))) 7 else 5, "mm"),
-    height=nrow(mat)*grid::unit(5, "mm"),
+    width=if (!is.null(w)) ncol(mat)*grid::unit(if (any(grepl("\n", colnames(mat)))) 1.4*w else w, "mm") else NULL,
+    height=if (!is.null(h)) nrow(mat)*grid::unit(h, "mm") else NULL,
     row_title=ylab,
     row_title_gp=grid::gpar(fontsize=10),
     row_title_side=pos.map[str_extract(lab.pos, "[lr]")],
+    show_row_names=grepl("y", txt),
     row_names_gp=grid::gpar(fontsize=9),
     row_names_side=pos.map[str_extract(lab.pos, "[lr]")],
-    cluster_rows=grepl("y", clust),
-    row_dend_side=if (grepl("y", clust)) pos.map[str_extract(dend.pos, "[lr]")] else "left",
+    row_split=y.grp,
+    cluster_rows=if (!is.null(y.clust)) y.clust else grepl("y", clust),
+    show_row_dend=grepl("[lr]", dend.pos),
+    row_dend_side=if (grepl("y", clust) && grepl("[lr]", dend.pos)) pos.map[str_extract(dend.pos, "[lr]")] else "left",
     row_dend_width=grid::unit(7, "mm"),
     row_dend_gp=grid::gpar(lwd=0.2),
     column_title=xlab,
     column_title_gp=grid::gpar(fontsize=10),
     column_title_side=pos.map[str_extract(lab.pos, "[tb]")],
+    show_column_names=grepl("x", txt),
     column_names_gp=grid::gpar(fontsize=9),
     column_names_side=pos.map[str_extract(lab.pos, "[tb]")],
     column_names_rot=40,
-    cluster_columns=grepl("x", clust),
-    column_dend_side=if (grepl("x", clust)) pos.map[str_extract(dend.pos, "[tb]")] else "top",
+    column_split=x.grp,
+    cluster_columns=if (!is.null(x.clust)) x.clust else grepl("x", clust),
+    show_column_dend=grepl("[tb]", dend.pos),
+    column_dend_side=if (grepl("x", clust) && grepl("[tb]", dend.pos)) pos.map[str_extract(dend.pos, "[tb]")] else "top",
     column_dend_height=grid::unit(7, "mm"),
     column_dend_gp=grid::gpar(lwd=0.2),
     border=TRUE,
@@ -1711,7 +1733,7 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   }
   if (is.null(gns) && !is.null(markers)) gns <- unique(unlist(markers))
   if (missing(xlab)) xlab <- grp
-  tmp <- summ.expr.by.grp(dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, pct=TRUE, expr.cutoff, ncells.cutoff, ret.no.t=FALSE, ret.grp.sizes=TRUE)
+  tmp <- summ.expr.by.grp(dat=dat, gns=gns, mdat=mdat, grp=grp, blk=blk, exp=exp, f1=f1, t1=t1, f2=f2, t2=t2, pct=TRUE, expr.cutoff=expr.cutoff, ncells.cutoff=ncells.cutoff, ret.no.t=FALSE, ret.grp.sizes=TRUE)
   # todo: use ret.no.t=TRUE to also plot a non-scaled plot (provide this as an option)
   avg <- tmp$avg
   pct <- tmp$pct
@@ -1795,13 +1817,13 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   }
 
   tryCatch({
-    plot.hm(avg, pct, sp=FALSE, xlab, ylab, x.anno, y.anno, name=ifelse(std, "std expr", "log expr"), sname="% expr", cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
+    plot.hm(mat=avg, smat=pct, sp=FALSE, name=ifelse(std, "std expr", "log expr"), sname="% expr", xlab=xlab, ylab=ylab, x.anno=x.anno, y.anno=y.anno, cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
   }, error=function(e) {
     # if error, could be that clustering failed due to NA's
     message("Will try replacing all NA's with 0. Alternatively, try pass clust='' to disable clustering of rows and columns of the heatmap.")
     avg[is.na(avg)] <- 0
     pct[is.na(pct)] <- 0
-    plot.hm(avg, pct, sp=FALSE, xlab, ylab, x.anno, y.anno, name=ifelse(std, "std expr", "log expr"), sname="% expr", cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
+    plot.hm(mat=avg, smat=pct, sp=FALSE, name=ifelse(std, "std expr", "log expr"), sname="% expr", xlab=xlab, ylab=ylab, x.anno=x.anno, y.anno=y.anno, cols=cols, pal=pal, m3d=m3d, cellf=cellf, ...)
   })
 }
 
