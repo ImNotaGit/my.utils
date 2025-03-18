@@ -464,6 +464,68 @@ get.tmm.log.cpm <- function(dat, ctrl.features=NULL, prior.count=1) {
 }
 
 
+get.vsd <- function(dat, method=c("vst", "rlog"), ctrl.features=NULL, size.factors=NULL, pheno=NULL, model=~., blind=FALSE, ...) {
+  # get variance-stabalized data with DESeq2::vst or DESeq2::rlog
+  # dat: gene-by-sample expression matrix of raw counts; should have low genes already filtered out
+
+  if (!requireNamespace("DESeq2", quietly=TRUE)) {
+    stop("Package \"DESeq2\" needed for this function to work.")
+  }
+
+  method <- match.arg(method)
+
+  if (!is.null(pheno)) {
+    pheno <- as.data.table(pheno)
+    vs <- unique(c(all.vars(model), names(model.frame(model, pheno))))
+    vs <- vs[vs!="." & !grepl("\\(|\\)", vs)]
+    ccs <- complete.cases(pheno[, vs, with=FALSE])
+    if (any(!ccs)) {
+      dat <- dat[, ccs]
+      pheno <- pheno[ccs]
+      message("Removed ", sum(!ccs), " samples with incomplete (NA) covariate data.")
+    } else pheno <- copy(pheno)
+    tmp <- sapply(pheno[, vs, with=FALSE], function(x) !is.numeric(x) & !is.factor(x))
+    if (any(tmp)) {
+      message("These non-numeric variables included in the model are not factors:")
+      message(cc(vs[tmp]))
+      message("They are converted to factors.")
+      pheno[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
+    }
+  } else {
+    pheno <- data.table(rep(1, ncol(dat)))
+    ccs <- rep(TRUE, ncol(dat))
+    model <- ~1
+    blind <- TRUE
+  }
+
+  if (!(missing(ctrl.features) || is.null(ctrl.features))) {
+    if (is.character(ctrl.features)) ctrl.features <- match(ctrl.features, rownames(dat))
+    if (all(is.na(ctrl.features))) stop("None of the provided `ctrl.features` is found in data.")
+    if (anyNA(ctrl.features)) message("Some `ctrl.features` not in data.")
+    ctrl.features <- ctrl.features[!is.na(ctrl.features)]
+  } else ctrl.features <- NULL
+
+  if (!(missing(size.factors) || is.null(size.factors))) {
+    if (length(size.factors)==1) size.factors <- rep(size.factors, ncol(dat)) else size.factors <- size.factors[ccs]
+  } else size.factors <- NULL
+
+  dds <- DESeq2::DESeqDataSetFromMatrix(countData=dat, colData=pheno, design=model)
+  if (is.null(size.factors)) {
+    if (is.null(ctrl.features)) {
+      dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, ...)
+    } else {
+      dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
+    }
+  } else DESeq2:::sizeFactors.DESeqDataSet(dds) <- size.factors
+
+  if (method=="vst") {
+    assay(pass3dots(DESeq2::vst, dds, blind=blind, ...))
+  } else if (method=="rlog") {
+    assay(pass3dots(DESeq2::rlog, dds, blind=blind, ...))
+  }
+}
+
+
 .calc.norm.factors.with.ctrl <- function(object, ctrl, lib.size = NULL, method=c("TMM", "RLE"), refColumn = NULL, doWeighting = TRUE, Acutoff = -1e+10) {
   # my copy of edgeR::calcNormFactors.default allowing for specifying of control features/genes, i.e. features/genes that are exprected to remain stable across conditions.
   # ctrl: one or more control features/genes as row indices or row names of object, which is a gene (feature)-by-sample matrix
@@ -691,7 +753,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
       } else {
         dds <- pass3dots(DESeq2:::estimateSizeFactors.DESeqDataSet, dds, controlGenes=ctrl.features, ...)
       }
-    } else sizeFactors(dds) <- size.factors
+    } else DESeq2:::sizeFactors.DESeqDataSet(dds) <- size.factors
   }
 
   if (test=="LRT") {
