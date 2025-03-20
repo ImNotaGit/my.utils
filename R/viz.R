@@ -69,7 +69,8 @@ plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, color=NULL, shape=NULL
   # label.subset: specify the subset to add labels; a logical or numeric index vector in the same order as label/rows of dat, or a character vector of a subset of labels; will label all points if NULL
   # label.outliers: if TRUE, will label ourliers in red, independent from other label settings (even if label is NULL); to label only the outliers (and no other points), need to set label.subset to NA
   # ourliers.cutoff: the alpha level for determining outliers with a Chi-Squared distribution of the Mahalanobis distances
-  # cor.pos, cor.size: for the text label on correlation, its position and size
+  # trend: trend line(s) to add, "lm" or "loess" or both or NULL
+  # when trend is "lm", will add label on correlation by default; cor.pos, cor.size are for the label position and size; set cor.pos to NULL to disable the label
   # do.plot: whether to do plotting, if FALSE, will only return the ggplot object
 
   if (is.null(dat)) {
@@ -152,30 +153,32 @@ plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, color=NULL, shape=NULL
   if (diag) p <- p + geom_abline(slope=1, intercept=0, color="grey")
   if ("lm" %in% trend) {
     p <- p + geom_smooth(method=lm, color="blue", size=0.8, fill="blue", alpha=0.2)
-    cor.method <- match.arg(cor.method)
-    ct <- cor.test(as.numeric(dat[[x]]), as.numeric(dat[[y]]), method=cor.method)
-    symb <- switch(cor.method, pearson="r", spearman="rho", kendall="tau")
-    pval <- ct$p.value
-    r <- ct$estimate
-    if (is.na(pval)) lab <- sprintf("%s=%.3f\nP=NA", symb, r) else if (pval>=2.2e-16) lab <- sprintf("%s=%.3f\nP=%.3g", symb, r, pval) else lab <- sprintf("%s=%.3f\nP<2.2e-16", symb, r)
-    if (length(cor.pos)==1 && cor.pos=="auto") {
-      if (!exists("dmat")) dmat <- table(cut(dat[[x]], breaks=5), cut(dat[[y]], breaks=5))
-      tmp <- which(dmat==min(dmat))
-      if (is.na(r) || r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
-      else tmp1 <- match(c(25,20,24,15,19,23,1,2,6,3,7,11,10,14,18,22,4,8,12,16,5,9,13,17,21), tmp)
-      tmp <- tmp[tmp1[!is.na(tmp1)][1]]
-      i <- tmp %% 5
-      if (i==0) i <- 5
-      j <- (tmp-1) %/% 5 + 1
-      cor.pos.x <- (1.1-0.2*i)*min(as.numeric(dat[[x]]),na.rm=TRUE)+(0.2*i-0.1)*max(as.numeric(dat[[x]]),na.rm=TRUE)
-      cor.pos.y <- (1.1-0.2*j)*min(as.numeric(dat[[y]]),na.rm=TRUE)+(0.2*j-0.1)*max(as.numeric(dat[[y]]),na.rm=TRUE)
-      if (lubridate::is.Date(dat[[x]])) cor.pos.x <- as.Date(cor.pos.x, origin="1970-01-01")
-      if (lubridate::is.Date(dat[[y]])) cor.pos.y <- as.Date(cor.pos.y, origin="1970-01-01")
-    } else {
-      cor.pos.x <- cor.pos[1]
-      cor.pos.y <- cor.pos[2]
+    if (!is.null(cor.pos)) {
+      cor.method <- match.arg(cor.method)
+      ct <- cor.test(as.numeric(dat[[x]]), as.numeric(dat[[y]]), method=cor.method)
+      symb <- switch(cor.method, pearson="r", spearman="rho", kendall="tau")
+      pval <- ct$p.value
+      r <- ct$estimate
+      if (is.na(pval)) lab <- sprintf("%s=%.3f\nP=NA", symb, r) else if (pval>=2.2e-16) lab <- sprintf("%s=%.3f\nP=%.3g", symb, r, pval) else lab <- sprintf("%s=%.3f\nP<2.2e-16", symb, r)
+      if (length(cor.pos)==1 && cor.pos=="auto") {
+        if (!exists("dmat")) dmat <- table(cut(dat[[x]], breaks=5), cut(dat[[y]], breaks=5))
+        tmp <- which(dmat==min(dmat))
+        if (is.na(r) || r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
+        else tmp1 <- match(c(25,20,24,15,19,23,1,2,6,3,7,11,10,14,18,22,4,8,12,16,5,9,13,17,21), tmp)
+        tmp <- tmp[tmp1[!is.na(tmp1)][1]]
+        i <- tmp %% 5
+        if (i==0) i <- 5
+        j <- (tmp-1) %/% 5 + 1
+        cor.pos.x <- (1.1-0.2*i)*min(as.numeric(dat[[x]]),na.rm=TRUE)+(0.2*i-0.1)*max(as.numeric(dat[[x]]),na.rm=TRUE)
+        cor.pos.y <- (1.1-0.2*j)*min(as.numeric(dat[[y]]),na.rm=TRUE)+(0.2*j-0.1)*max(as.numeric(dat[[y]]),na.rm=TRUE)
+        if (lubridate::is.Date(dat[[x]])) cor.pos.x <- as.Date(cor.pos.x, origin="1970-01-01")
+        if (lubridate::is.Date(dat[[y]])) cor.pos.y <- as.Date(cor.pos.y, origin="1970-01-01")
+      } else {
+        cor.pos.x <- cor.pos[1]
+        cor.pos.y <- cor.pos[2]
+      }
+      p <- p + annotate("text", x=cor.pos.x, y=cor.pos.y, label=lab, size=cor.size)
     }
-    p <- p + annotate("text", x=cor.pos.x, y=cor.pos.y, label=lab, size=cor.size)
   }
 
   if (!is.null(label)) {
