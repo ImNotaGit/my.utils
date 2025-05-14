@@ -1124,7 +1124,7 @@ make.pseudobulk <- function(dat, mdat, blk, ncells.cutoff=10) {
       stop("Packages \"Seurat\" needed for this function to work.")
     }
     if (missing(mdat)) mdat <- dat@meta.data
-    dat <- dat$RNA@counts
+    dat <- Seurat::GetAssayData(dat, assay="RNA", slot="counts")
   }
 
   mdat <- as.data.table(mdat)
@@ -1182,12 +1182,12 @@ summ.expr.by.grp <- function(dat, gns=NULL, mdat, grp, blk=NULL, exp=TRUE, f1=me
     if (!require("Seurat", quietly=TRUE)) {
       stop("Packages \"Seurat\" needed for this function to work.")
     }
-    if (identical(dat$RNA@data, dat$RNA@counts)) {
+    if (identical(Seurat::GetAssayData(dat, assay="RNA", slot="data"), Seurat::GetAssayData(dat, assay="RNA", slot="counts"))) {
       message("dat$RNA is not normalized, will normalize data.\n")
       dat <- Seurat::NormalizeData(dat, assay="RNA")
     }
     mdat <- dat@meta.data
-    dat <- dat$RNA@data
+    dat <- Seurat::GetAssayData(dat, assay="RNA", slot="data")
   }
 
   if (!is.null(gns)) {
