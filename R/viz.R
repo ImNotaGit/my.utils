@@ -583,6 +583,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
       tmp <- split(dat, by=facet)
       tmp <- tmp[sapply(tmp, nrow)>0] # drop levels
       dat.cp <- rbindlist(lapply(tmp, function(d) do.call(run.wilcox, c(list(dat=d, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))), idcol=facet)
+      dat.cp[, c(facet):=factor(get(facet), levels=levels(factor(dat[[facet]])))]
     } else {
       dat.cp <- do.call(run.wilcox, c(list(dat=dat, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))
     }
@@ -601,6 +602,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     if (readj.pval && "pval" %in% names(dat.cp)) dat.cp[, padj:=p.adjust(pval, "BH")]
     if (!is.null(facet) && !facet %in% names(dat.cp)) {
       if ("id" %in% names(dat.cp)) dat.cp[, c(facet):=id] else stop(sprintf("`facet` variable (\"%s\") not present in `dat.cp`.", facet))
+      dat.cp[, c(facet):=factor(get(facet), levels=levels(factor(dat[[facet]])))]
     }
     if (is.character(lab.subset)) dat.cp <- dat.cp[eval(parse(text=lab.subset))==TRUE]
   }
