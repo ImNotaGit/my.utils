@@ -369,7 +369,11 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
     #tmp <- do.call(wilcox, c(list(value~group, dat), more.args))
     tmp <- do.call(wilcox, c(list(s1=l[[1]], s2=l[[2]]), more.args))
     stat <- dat[, .(id=12, x1=1, x2=2, x=1.5, y=xa(value,1.1), p=tmp$pval, r=tmp$r.wilcox)]
-    if (rlab) stat[, lab:=latex2exp::TeX(sprintf("$\\overset{r_{rb}=%.2g}{P=%.2g}$", r, p), output="character")] else stat[, lab:=sprintf("P=%.2g", p)]
+    if (rlab) {
+      stat[, lab:=latex2exp::TeX(ifelse(p>=2.2e-16, sprintf("$\\overset{r_{rb}=%.2g}{P=%.2g}$", r, p), sprintf("$\\overset{r_{rb}=%.2g}{P<2.2e-16}$", r)), output="character")]
+    } else {
+      stat[, lab:=ifelse(p>=2.2e-16, sprintf("P=%.2g", p), "P<2.2e-16")]
+    }
   } else if (ll==3) {
     tmp <- do.call(run.wilcox, c(list(dat, value~group), more.args))
     stat <- data.table(id=numeric(0), x=numeric(0), y=numeric(0), p=numeric(0), r=numeric(0))
@@ -384,7 +388,11 @@ cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=
     }
     stat[, padj:=p.adjust(p, "BH")]
     stat <- merge(data.table(id=c(12,23,13), x1=c(1,2,1), x2=c(2,3,3)), stat, by="id", all=FALSE)
-    if (rlab) stat[, lab:=latex2exp::TeX(sprintf("$\\overset{r_{rb}=%.2g}{P_{adj}=%.2g}$", r, padj), output="character")] else stat[, lab:=latex2exp::TeX(sprintf("$P_{adj}=%.2g$", padj))]
+    if (rlab) {
+      stat[, lab:=latex2exp::TeX(ifelse(padj>=2.2e-16, sprintf("$\\overset{r_{rb}=%.2g}{P_{adj}=%.2g}$", r, padj), sprintf("$\\overset{r_{rb}=%.2g}{P_{adj}<2.2e-16}$", r)), output="character")]
+    } else {
+      stat[, lab:=latex2exp::TeX(ifelse(padj>=2.2e-16, sprintf("$P_{adj}=%.2g$", padj), "$P_{adj}<2.2e-16$"))]
+    }
   }
   
   # plot summary
@@ -474,14 +482,14 @@ mcp.groups <- function(..., ylab="Value", more.args=list()) {
       stat <- do.call(run.wilcox, c(list(x, value~group), more.args))
       stat.p <- stat$pval
       stat.r <- stat$r.wilcox
-      sprintf("wilcox\nr=%.2g\nP=%.2g", stat.r, stat.p)
+      if (stat.p>=2.2e-16) sprintf("wilcox\nr=%.2g\nP=%.2g", stat.r, stat.p) else sprintf("wilcox\nr=%.2g\nP<2.2e-16", stat.r)
     })
   } else if (ll==3) {
     stat.out <- sapply(datl, function(x) {
       stat <- do.call(run.wilcox, c(list(x, value~group), more.args))
       stat.p <- stat$pval
       stat.r <- stat$r.wilcox
-      paste0("wilcox (12,23,13)\nr=", paste(sprintf("%.2g", stat.r), collapse="; "), "\nP=", paste(sprintf("%.2g", stat.p), collapse="; "))
+      paste0("wilcox (12,23,13)\nr=", paste(sprintf("%.2g", stat.r), collapse="; "), "\nP", paste(ifelse(stat.p>=2.2e-16, sprintf("=%.2g", stat.p), "<2.2e-16"), collapse="; "))
     })
   } #else stat.out <- rep("", length(datl))
 
@@ -588,8 +596,8 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
       dat.cp <- do.call(run.wilcox, c(list(dat=dat, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))
     }
     if (length(lab)==1 && lab=="default") {
-      lab <- "{f(r.wilcox, '%.2g')}\n({f(padj, '%.2g')})"
-      lab1 <- "r_{{rb}}={f(r.wilcox, '%.2g')}\n(P_{{adj}}={f(padj, '%.2g')})"
+      lab <- "{f(r.wilcox, '%.2g')}\n({ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '%.2g'))})"
+      lab1 <- "r_{{rb}}={f(r.wilcox, '%.2g')}\n(P_{{adj}}{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '=%.2g'))})"
     }
   }
   # data of comparison results
@@ -619,19 +627,19 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
         } else lab <- lab1 <- NULL
         if ("padj" %in% names(dat.cp)) {
           if (is.null(lab)) {
-            lab <- "{f(padj, '%.2g')}"
-            lab1 <- "P_{{adj}}={f(padj, '%.2g')}"
+            lab <- "{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '%.2g'))}"
+            lab1 <- "P_{{adj}}{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '=%.2g'))}"
           } else {
-            lab <- paste0(lab, "\n({f(padj, '%.2g')})")
-            lab1 <- paste0(lab1, "\n(P_{{adj}}={f(padj, '%.2g')})")
+            lab <- paste0(lab, "\n({ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '%.2g'))})")
+            lab1 <- paste0(lab1, "\n(P_{{adj}}{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '=%.2g'))})")
           }
         } else if ("pval" %in% names(dat.cp)) {
           if (is.null(lab)) {
-            lab <- "{f(pval, '%.2g')}"
-            lab1 <- "P={f(pval, '%.2g')}"
+            lab <- "{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '%.2g'))}"
+            lab1 <- "P{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '=%.2g'))}"
           } else {
-            lab <- paste0(lab, "\n({f(pval, '%.2g')})")
-            lab1 <- paste0(lab1, "\n(P={f(pval, '%.2g')})")
+            lab <- paste0(lab, "\n({ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '%.2g'))})")
+            lab1 <- paste0(lab1, "\n(P{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '=%.2g'))})")
           }
         }
       } else if (lab=="coef") {
@@ -641,11 +649,11 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
         lab <- "{f(log.fc, '%.2g')}"
         lab1 <- "logFC={f(log.fc, '%.2g')}"
       } else if (lab=="pval") {
-        lab <- "{f(pval, '%.2g')}"
-        lab1 <- "P={f(pval, '%.2g')}"
+        lab <- "{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '%.2g'))}"
+        lab1 <- "P{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '=%.2g'))}"
       } else if (lab=="padj") {
-        lab <- "{f(padj, '%.2g')}"
-        lab1 <- "P_{{adj}}={f(padj, '%.2g')}"
+        lab <- "{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '%.2g'))}"
+        lab1 <- "P_{{adj}}{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '=%.2g'))}"
       }
     }
     lab <- paste0("$", str_split(lab, "\n")[[1]], "$")
