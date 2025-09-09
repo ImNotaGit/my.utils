@@ -543,7 +543,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   # dat: data.table
   # xvar, yvar, facet: character; yvar can contain multiple values or can be "." to stand for all other columns in `dat` (for wide-format `dat`), or specify `facet` (for long-format `dat`)
   # geom: "b" (boxplot), "j" (jitter), "v" (violin), "l" (line, only effective if `pair` is not NULL)
-  # add.n: whether to add sample size per group; whenever possible this will be added to x labels and legend labels
+  # add.n: whether to add sample size per group; whenever possible this will be added to x labels and legend labels; if there are difference sample sizes across facets, will add the numbers just above the X axis
   # paired: if provided (as a character), then this variable will be used to specify sample pairing, with `geom` including "l" lines will be drawn connecting the paired samples, and for the default test paired test will be used
   # cps: character vector, between-group comparisons to label, each element should have format "groupA vs groupB", or can be "." for all possible pairs of comparisons (un-ordered)
   # dat.cp: data.table (with a column named "comparison", in the same format as `cps`) or list of data.tables (with names of the list in the same format as `cps`), the `facet` variable should be present (when `yvar` contains multiple values, will create the `facet` variable named "facet", in this case a column named "facet" should be present in dat.cp), otherwise will look for a column named "id" and use it as the facet variable
@@ -569,15 +569,31 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     xs <- c(xs, "NA")
     dat[, c(xvar):=factor(ifelse(is.na(get(xvar)), "NA", as.character(get(xvar))), levels=xs)]
   }
+  add.n.facet <- FALSE
   if (add.n) {
     if (is.null(facet)) {
       # add per-group sample size to x label
-      tmp <- dat[, .(n=.N), by=c(xvar)][, setNames(sprintf("%s\n(n=%d)", get(xvar), n), get(xvar))]
+      tmp <- dat[, .(n=sum(!is.na(get(yvar)))), by=c(xvar)][, setNames(sprintf("%s\n(n=%d)", get(xvar), n), get(xvar))]
       xlabs <- tmp[xs]
     } else {
-      # if there are multiple facets, the sample size can be different per facet; but for now just to make it simple, use mean sample size across facets
-      tmp <- dat[, .(n=.N), by=c(facet, xvar)][, .(n=round(mean(n))), by=c(xvar)][, setNames(sprintf("%s\n(n=%d)", get(xvar), n), get(xvar))]
-      xlabs <- tmp[xs]
+      # if there are multiple facets and the sample sizes are the same across facets
+      dat.n <- dat[, .(n=sum(!is.na(get(yvar)))), by=c(facet, xvar)][n>0]
+      tmp <- unique(dat.n[, -"facet"])
+      if (nrow(tmp)==uniqueN(tmp[[xvar]])) {
+        tmp[, setNames(sprintf("%s\n(n=%d)", get(xvar), n), get(xvar))]
+        xlabs <- tmp[xs]
+      } else {
+        xlabs <- xs
+        if (scales=="free_y") {
+          tmp <- dat[, .(yn=xa(get(yvar), -0.05)), by=c(facet)]
+          dat.n <- merge(dat.n, tmp, by=facet)
+        } else {
+          dat.n[, yn:=xa(get(yvar), -0.05)]
+        }
+        dat.n[, n:=as.character(n)]
+        dat.n[get(xvar)==xs[1], n:=sprintf("n=%s  ", n)]
+        add.n.facet <- TRUE
+      }
     }
   } else xlabs <- xs
   # all comparisons
@@ -699,7 +715,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     }
     cpsl <- rbindlist(lapply(cpsl, function(x) data.table(comparison=sapply(x, function(xx) paste(xx, collapse=" vs ")))), idcol="lvl")
     # calculate y values for each level
-    if (!is.null(facet)) {
+    if (!is.null(facet) && scales=="free_y") {
       tmp <- dat[, .(ymin=min(get(yvar)[is.finite(get(yvar))]), ymax=max(get(yvar)[is.finite(get(yvar))])), by=c(facet)]
       tmp[, fa:=get(facet)]
     } else {
@@ -781,7 +797,10 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     cps <- str_split(cps, " vs ")
     p <- p + ggsignif::geom_signif(comparisons=cps, test=test, test.args=test.args, textsize=lab.size, step_increase=y.inc, parse=TRUE, ...)
   }
-  p <- p + scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18))) + theme_classic()
+  p <- p + scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(if (add.n.facet) 0.1 else 0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18))) + theme_classic()
+  if (add.n.facet) {
+    p <- p + geom_text(data=dat.n, aes_string(x=xvar, y="yn", label="n"), size=lab.size)
+  }
   if (is.null(facet)) {
     p <- p + theme(
       axis.text.x=element_text(angle=40, hjust=1),
