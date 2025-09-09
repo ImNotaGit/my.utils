@@ -538,12 +538,13 @@ plot.groups.old <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, g
 }
 
 
-plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", geom=c("b", "j"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", ...) {
+plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", ...) {
   # new plot.groups for plotting arbitrary numbers of groups possibly with stratification (facets) and between-group comparison labels
   # dat: data.table
   # xvar, yvar, facet: character; yvar can contain multiple values or can be "." to stand for all other columns in `dat` (for wide-format `dat`), or specify `facet` (for long-format `dat`)
-  # geom: "b" (boxplot), "j" (jitter), "v" (violin)
-  # add.n: whether to add sample size per group in x labels and legend labels
+  # geom: "b" (boxplot), "j" (jitter), "v" (violin), "l" (line, only effective if `pair` is not NULL)
+  # add.n: whether to add sample size per group; whenever possible this will be added to x labels and legend labels
+  # paired: if provided (as a character), then this variable will be used to specify sample pairing, with `geom` including "l" lines will be drawn connecting the paired samples, and for the default test paired test will be used
   # cps: character vector, between-group comparisons to label, each element should have format "groupA vs groupB", or can be "." for all possible pairs of comparisons (un-ordered)
   # dat.cp: data.table (with a column named "comparison", in the same format as `cps`) or list of data.tables (with names of the list in the same format as `cps`), the `facet` variable should be present (when `yvar` contains multiple values, will create the `facet` variable named "facet", in this case a column named "facet" should be present in dat.cp), otherwise will look for a column named "id" and use it as the facet variable
   # when `dat.cp` is NULL and `cps` is not, will compare the groups in `cps` and add the results as labels; by default (`test`="default") comparing using wilcoxon tests (`run.wilcox`); if `dat.cp` is given will use it for labeling regardelss of `cps`, but `cps` can be used to specify a subset to label, and if `cps` is not given will use all results in `dat.cp` that is compatible with `dat`
@@ -590,10 +591,18 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     if (!is.null(facet)) {
       tmp <- split(dat, by=facet)
       tmp <- tmp[sapply(tmp, nrow)>0] # drop levels
-      dat.cp <- rbindlist(lapply(tmp, function(d) do.call(run.wilcox, c(list(dat=d, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))), idcol=facet)
+      if (is.null(paired)) {
+        dat.cp <- rbindlist(lapply(tmp, function(d) do.call(run.wilcox, c(list(dat=d, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))), idcol=facet)
+      } else {
+        dat.cp <- rbindlist(lapply(tmp, function(d) do.call(run.wilcox, c(list(dat=d, model=as.formula(sprintf("%s ~ %s + %s", yvar, xvar, paired)), cps=cps), test.args))), idcol=facet)
+      }
       dat.cp[, c(facet):=factor(get(facet), levels=levels(factor(dat[[facet]])))]
     } else {
-      dat.cp <- do.call(run.wilcox, c(list(dat=dat, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))
+      if (is.null(paired)) {
+        dat.cp <- do.call(run.wilcox, c(list(dat=dat, model=as.formula(sprintf("%s ~ %s", yvar, xvar)), cps=cps), test.args))
+      } else {
+        dat.cp <- do.call(run.wilcox, c(list(dat=dat, model=as.formula(sprintf("%s ~ %s + %s", yvar, xvar, paired)), cps=cps), test.args))
+      }
     }
     if (length(lab)==1 && lab=="default") {
       lab <- "{f(r.wilcox, '%.2g')}\n({ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '%.2g'))})"
@@ -723,8 +732,11 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   }
 
   p <- ggplot(dat, aes_string(x=xvar, y=yvar)) +
-    scale_x_discrete(labels=xlabs, name=xlab)
+    scale_x_discrete(labels=xlabs, name=xlab, drop=FALSE)
   if (!is.null(facet)) p <- p + facet_wrap(as.formula(sprintf("~%s", facet)), scales=scales, ncol=ncol)
+  if (!is.null(paired) && any(c("line","l") %in% geom)) {
+    p <- p + geom_line(aes_string(group=paired), color="grey20", size=0.3, alpha=0.2)
+  }
   if (any(c("jitter","j") %in% geom)) {
     if (any(c("violin","v","box","b") %in% geom)) {
       p <- p + geom_jitter(aes_string(color=col), size=0.8, width=0.15, height=0, alpha=0.4)
