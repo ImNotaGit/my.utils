@@ -578,7 +578,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     } else {
       # if there are multiple facets and the sample sizes are the same across facets
       dat.n <- dat[, .(n=sum(!is.na(get(yvar)))), by=c(facet, xvar)][n>0]
-      tmp <- unique(dat.n[, -"facet"])
+      tmp <- unique(dat.n[, c(xvar, "n"), with=FALSE])
       if (nrow(tmp)==uniqueN(tmp[[xvar]])) {
         tmp[, setNames(sprintf("%s\n(n=%d)", get(xvar), n), get(xvar))]
         xlabs <- tmp[xs]
