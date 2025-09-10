@@ -538,7 +538,7 @@ plot.groups.old <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, g
 }
 
 
-plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, ...) {
+plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, return.jitter=FALSE, ...) {
   # new plot.groups for plotting arbitrary numbers of groups possibly with stratification (facets) and between-group comparison labels
   # dat: data.table
   # xvar, yvar, facet: character; yvar can contain multiple values or can be "." to stand for all other columns in `dat` (for wide-format `dat`), or specify `facet` (for long-format `dat`)
@@ -551,6 +551,8 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   # lab, lab1: glue::glue formatting strings with latex formatting support, these format `dat.cp` columns to get the labels, if `lab1` is given, will use it for the top label and use `lab` for all the rest labels; can contain shorthand "f(x, fmt)" which is equivalent to sprintf(fmt, x); e.g. "P_{{adj}}={f(padj, '%.2g')}"; use "\n" for new line; "default" is coef/log.fc and Padj, or can be the shorthands "coef", "log.fc", "pval", "padj"
   # lab.subset, flag: expression strings for subsetting comparison results; only the `lab.subset` subset will be labeled, among which the `flag` subset will be highlighted in red
   # y.inc: increase in y for each line of label (if `lab` contains multiple lines, this roughly corresponds to the height of each line of label)
+  # return.jitter: if TRUE and jitter plot is used, return list(p, jitter)
+  # ...: passed to ggsignif::geom_signif (only used if is.null(dat.cp) && !is.null(cps))
 
   # y variables
   if (length(yvar)==1 && yvar==".") yvar <- setdiff(names(dat), xvar)
@@ -755,10 +757,12 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   }
   if (any(c("jitter","j") %in% geom)) {
     if (any(c("violin","v","box","b") %in% geom)) {
-      p <- p + geom_jitter(aes_string(color=col), size=0.8, width=0.15, height=0, alpha=0.4)
+      jitter <- position_jitter(width=0.15, height=0, seed=1)
+      p <- p + geom_point(aes_string(color=col), position=jitter, size=0.8, alpha=0.4)
     } else {
+      jitter <- position_jitter(width=0.2, height=0, seed=1)
       p <- p +
-        geom_jitter(aes_string(color=col), size=0.8, width=0.2, height=0, alpha=0.8) +
+        geom_point(aes_string(color=col), position=jitter, size=0.8, alpha=0.8) +
         stat_summary(aes_string(color=col), fun.data=mean_se, geom="pointrange") # plot a line with central dot for mean+/-se
     }
   }
@@ -816,6 +820,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
       legend.position=lgd.pos
     )
   }
+  if (return.jitter && any(c("jitter","j") %in% geom)) return(list(p=p, jitter=jitter))
   p
 }
 
