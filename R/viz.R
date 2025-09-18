@@ -1615,7 +1615,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
         if (length(sizes)==2) sizes <- c(0.1, 0.2, 0.55)
       }
     }
-    rf <- .fsize(smat, sizes, s.seps, from0=TRUE, sym=FALSE, m3d=FALSE, sizes.m3d, trans=NULL)
+    rf <- .fsize(smat, sizes, s.seps, from0=s.from0, sym=s.sym, m3d=s.m3d, sizes.m3d=sizes.m3d, trans=s.trans)
     if (is.null(cellf)) {
       if (sp) {
         cellf <- function(j, i, x, y, width, height, fill) {
