@@ -519,9 +519,9 @@ get.vsd <- function(dat, method=c("vst", "rlog"), ctrl.features=NULL, size.facto
   } else DESeq2:::sizeFactors.DESeqDataSet(dds) <- size.factors
 
   if (method=="vst") {
-    assay(pass3dots(DESeq2::vst, dds, blind=blind, ...))
+    SummarizedExperiment::assay(pass3dots(DESeq2::vst, dds, blind=blind, ...))
   } else if (method=="rlog") {
-    assay(pass3dots(DESeq2::rlog, dds, blind=blind, ...))
+    SummarizedExperiment::assay(pass3dots(DESeq2::rlog, dds, blind=blind, ...))
   }
 }
 
