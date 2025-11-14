@@ -16,9 +16,9 @@ my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE,
 
   if (no.grey) {
     # this is to avoid confusion with NA, which is by default colored grey
-    cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#66CD00", "#FF7D7D", "#AB82FF", "#D2B48C", "#ADFF2F", "#CD853F", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#FF4500", "#CD96CD")
+    cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#66CD00", "#FF7D7D", "#AB82FF", "#D2B48C", "#ADFF2F", "#CD853F", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#FF4500", "#121212", "#CD96CD", "#7EC0EE")
   } else {
-    cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#DADADA", "#66CD00", "#FF7D7D", "#D2B48C", "#AB82FF", "#667788", "#ADFF2F", "#CD853F", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#7EC0EE", "#FF4500", "#CD96CD")
+    cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#DADADA", "#66CD00", "#FF7D7D", "#D2B48C", "#AB82FF", "#667788", "#ADFF2F", "#CD853F", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#FF4500", "#121212", "#CD96CD", "#7EC0EE")
   }
 
   if (missing(x)) return(cols)
@@ -112,7 +112,7 @@ plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, color=NULL, shape=NULL
   if (isTRUE(label)) label <- ids
   if (label.outliers && is.null(label)) {
     label <- ids
-    if (is.null(label.subset)) label.subset <- NA
+if (is.null(label.subset)) label.subset <- NA
   }
   if (!(length(label)==1 && label %in% names(dat) || is.null(label))) {
     dat[, label:=label]
@@ -867,50 +867,59 @@ plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="over
 }
 
 
-thm <- function(x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA, face=NA,
-  lgd=c(NA,"none","right","bottom","left","top"), lgd.dir=c(NA,"vertical","horizontal"), lgd.box=c(NA,"vertical","horizontal"),
-  lgd.tit=NA, lgd.txt=NA, lgd.key=NA, lgd.margin=NA, plt.margin=NA) {
+thm <- function(thm="classic", x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA,
+  grid=NA, grid.min=NA, grid.all=NA, grid.x=NA, grid.x.min=NA, grid.y=NA, grid.y.min=NA,
+  str.txt=NA, str.txt.x=NA, str.txt.y=NA, str.bg=NA, str.bg.x=NA, str.bg.y=NA,
+  lgd=c(NA,"no","r","b","l","t","in"), lgd.dir=c(NA,"v","h"), lgd.box=c(NA,"v","h"),
+  lgd.tit=NA, lgd.txt=NA, lgd.key=NA, lgd.mgn=NA, plt.mgn=NA, unit="pt", ...) {
   # shorthand for ggplot2::theme() used for adjusting axes labels, legends, and plot margins
   # NULL means element_blank(), NA means not specified (i.e. default)
   # for arguments corresponding to text elements, can give a single number for text size, or give a named list of parameters, which will be passed to element_text()
-  # for lgd.key, give a single number for legend key size in pt
-  # for lgd.margin and plt.margin, give a vector of 4 number, representing the margin values in pt for top, right, bottom, and left
+  # for lgd.key, give a single number for legend key size in unit
+  # for lgd.mgn and plt.mgn, give a vector of 4 number, representing the margin values in unit for top, right, bottom, and left
+  # ...: others passed directly to ggplot2::theme
 
   lgd <- match.arg(lgd)
+  if (!is.na(lgd)) lgd <- switch(lgd, no="none", r="right", b="bottom", l="left", t="top", in="inside")
   lgd.dir <- match.arg(lgd.dir)
+  if (!is.na(lgd.dir)) lgd.dir <- switch(lgd.dir, v="vertical", h="horizontal")
   lgd.box <- match.arg(lgd.box)
+  if (!is.na(lgd.box)) lgd.box <- switch(lgd.box, v="vertical", h="horizontal")
 
-  f <- function(x, u=NULL) {
+  f <- function(x, a=c("t","l","r","u")) {
+    a <- match.arg(a)
     if (is.null(x) || length(x)==0) {
       element_blank()
     } else if (is.numeric(x)) {
-      if (is.null(u)) element_text(size=x) else grid::unit(x, u)
+      switch(a, t=element_text(size=x), l=element_line(linewidth=x), u=grid::unit(x, unit))
     } else if (is.list(x)) {
-      do.call(element_text, x)
+      switch(a, t=do.call(element_text, x), l=do.call(element_line, x), r=do.call(element_rect, x))
     } else if (length(x)==1 && is.na(x)) {
       NULL
     } else x
   }
 
   pars <- list(
-    axis.title.x=f(x.tit),
-    axis.text.x=f(x.txt),
-    axis.title.y=f(y.tit),
-    axis.text.y=f(y.txt),
-    plot.title=f(tit),
-    strip.text=f(face),
-    legend.position=f(lgd),
-    legend.direction=f(lgd.dir),
-    legend.title=f(lgd.tit),
-    legend.text=f(lgd.txt),
-    legend.key.size=f(lgd.key, "pt"),
-    legend.box=f(lgd.box),
-    legend.box.margin=f(lgd.margin, "pt"),
-    plot.margin=f(plt.margin, "pt")
+    axis.title.x=f(x.tit), axis.text.x=f(x.txt), axis.title.y=f(y.tit), axis.text.y=f(y.txt), plot.title=f(tit),
+    panel.grid.major=f(grid, "l"), panel.grid.minor=f(grid.min, "l"), panel.grid=f(grid.all, "l"),
+    panel.grid.major.x=f(grid.x, "l"), panel.grid.minor.x=f(grid.x.min, "l"),
+    panel.grid.major.y=f(grid.y, "l"), panel.grid.minor.y=f(grid.y.min, "l"),
+    strip.text=f(str.txt), strip.text.x=f(str.txt.x), strip.text.x.top=f(str.txt.x), strip.text.x.bottom=f(str.txt.x),
+    strip.text.y=f(str.txt.y), strip.text.y.left=f(str.txt.y), strip.text.y.right=f(str.txt.y),
+    strip.background=f(str.bg), strip.background.x=f(str.bg.x), strip.background.y=f(str.bg.y),
+    legend.position=f(lgd), legend.direction=f(lgd.dir), legend.title=f(lgd.tit), legend.text=f(lgd.txt), legend.key.size=f(lgd.key, "u"), legend.box=f(lgd.box), legend.box.margin=f(lgd.mgn, "u"),
+    plot.margin=f(plt.mgn, "u"),
+    ...
   )
 
   pars <- pars[!sapply(pars, is.null)]
-  do.call(theme, pars)
+  thms <- do.call(ggplot2::theme, pars)
+  if (!is.null(thm)) {
+    thm <- paste0("theme_", thm)
+    thm <- tryCatch(getFromNamespace(thm, ns="ggplot2"), error=function(e) get(thm))
+    thms <- thm + thms
+  }
+  thms
 }
 
 
