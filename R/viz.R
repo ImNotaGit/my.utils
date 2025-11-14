@@ -880,7 +880,7 @@ thm <- function(thm="classic", x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA,
   # ...: others passed directly to ggplot2::theme
 
   lgd <- match.arg(lgd)
-  if (!is.na(lgd)) lgd <- switch(lgd, no="none", r="right", b="bottom", l="left", t="top", in="inside")
+  if (!is.na(lgd)) lgd <- switch(lgd, no="none", r="right", b="bottom", l="left", t="top", `in`="inside")
   lgd.dir <- match.arg(lgd.dir)
   if (!is.na(lgd.dir)) lgd.dir <- switch(lgd.dir, v="vertical", h="horizontal")
   lgd.box <- match.arg(lgd.box)
