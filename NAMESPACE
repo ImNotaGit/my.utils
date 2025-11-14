@@ -1,1 +1,6 @@
 exportPattern("^[[:alpha:]]+")
+import(data.table)
+import(stringr)
+import(magrittr)
+import(parallel)
+import(ggplot2)
