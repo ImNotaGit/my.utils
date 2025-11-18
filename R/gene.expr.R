@@ -832,7 +832,7 @@ de.deseq2 <- function(dat, pheno, model=~., design, coef, contrast, reduced.mode
 }
 
 
-de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, size.factors, pseudobulk=NULL, keep.fit=FALSE, ...) {
+de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.model, contr.to.coef=FALSE, size.factors="ratio", keep.fit=FALSE, ...) {
   # differential expression analysis with glmGamPoi, this may be used for single-cell RNA-seq data
   # dat: gene-by-sample expression matrix of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
   # pheno: phenotypic data as a data.table with the same order of samples
@@ -844,17 +844,15 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
   # contrast: numeric contrast vector or matrix (for the latter, one contrast per column), or character vector specifying one or more contrasts in terms of the column names of the design matrix (e.g. sth like "grpA-grpB", in which case it will be converted to contrast vector/matrix with limma::makeContrasts); the matrix case and character vector of length>1 case is handled in the same way as the case of coef with length>1 (i.e. "joint" testing), which may be useful in some cases, but this requires the multiple contrasts are not collinear and probably require contr.to.coef=TRUE for many methods (not tested); for the common use case of separately checking multiple contrasts, pass them in a list of numeric vectors (instead of a single contrast matrix) or a list of atom character vectors (instead of a single length>1 character vector)
   # reduced.model: formula of the reduced model (works only if pheno is provided), or vector of model coefficients (columns of design matrix) to keep (i.e., the opposite to coef, which specifies the coefficients to drop), or design matrix of the reduced model; for multiple tests, provide a list of such items;
   # contr.to.coef: whether to reform the design matrix with limma::contrastAsCoef such that contrasts become coefficients
-  # size.factors: passed to glmGamPoi::glm_gp `size_factors`, if missing use the default "normed_sum"
-  # pseudobulk: passed to glmGamPoi::test_de `pseudobulk_by`
+  # size.factors: passed to glmGamPoi::glm_gp `size_factors`, default to "ratio" (DESeq2); for single-cell one may use "deconvolution" (scran); "normed_sum" is total count normalized with geometric mean 1; to disable size factors, set it to 1
   # keep.fit: if TRUE, then also return the fitted model in addition to the DE result table(s) as list(fit=fit, summary=de.res), otherwise return de.res
   # nc: number of cores for parallelization
   # ...: passed to glmGamPoi::glm_gp and glmGamPoi::test_de
+  # note: I have removed the previous pseudobulk parameter passed to `pseudobulk_by` in glmGamPoi::test_de, since glmGamPoi now recommends creating pseudobulk data beforehand if needed (for efficiency); but pseudobulk_by can still be passed via ...
 
   if (!requireNamespace("glmGamPoi", quietly=TRUE)) {
     stop("Package \"glmGamPoi\" needed for this function to work.")
   }
-
-  if (missing(size.factors)) size.factors <- "normed_sum"
 
   pars <- .process.de.params(dat=dat, pheno=pheno, model=model, design=design, coef=coef, contrast=contrast, reduced.model=reduced.model, contr.to.coef=contr.to.coef, make.contr=FALSE)
   # so glmGamPoi::test_de has some issue handling coefficients with special characters in their names, including `(Intercept)` and interaction terms like `a:b`, and the solution is simply to quote them with ``
@@ -864,8 +862,8 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
   if (!is.null(pars$coef)) {
     fit <- list(pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...))
     de.res <- mapply(function(coef, reduced.model) {
-      if (length(coef)==1) pass3dots(glmGamPoi::test_de, fit[[1]], contrast=coef, pseudobulk_by=pseudobulk, ...)
-        else pass3dots(glmGamPoi::test_de, fit[[1]], reduced_design=reduced.model, pseudobulk_by=pseudobulk, ...)
+      if (length(coef)==1) pass3dots(glmGamPoi::test_de, fit[[1]], contrast=coef, ...)
+        else pass3dots(glmGamPoi::test_de, fit[[1]], reduced_design=reduced.model, ...)
     }, pars$coef, pars$reduced.model, SIMPLIFY=FALSE)
   } else {
     fit <- list()
@@ -876,12 +874,12 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
   if (!is.null(pars$contrast)) {
     if (!contr.to.coef) {
       if (length(fit)==0) fit <- list(pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=pars$design, size_factors=size.factors, ...))
-      de.res <- c(de.res, lapply(pars$contrast, function(x) pass3dots(glmGamPoi::test_de, fit[[1]], contrast=x, pseudobulk_by=pseudobulk, ...)))
+      de.res <- c(de.res, lapply(pars$contrast, function(x) pass3dots(glmGamPoi::test_de, fit[[1]], contrast=x, ...)))
     } else {
       tmp <- mapply(function(design, coef, reduced.model) {
         fit <- pass3dots(glmGamPoi::glm_gp, as.matrix(pars$dat), design=design, size_factors=size.factors, ...)
-        if (length(coef)==1) de.res <- pass3dots(glmGamPoi::test_de, fit, contrast=coef, pseudobulk_by=pseudobulk, ...)
-            else de.res <- pass3dots(glmGamPoi::test_de, fit, reduced_design=reduced.model, pseudobulk_by=pseudobulk, ...)
+        if (length(coef)==1) de.res <- pass3dots(glmGamPoi::test_de, fit, contrast=coef, ...)
+            else de.res <- pass3dots(glmGamPoi::test_de, fit, reduced_design=reduced.model, ...)
         list(fit=fit, de.res=de.res)
       }, pars$design.contr, pars$coef.contr, pars$reduced.model.contr, SIMPLIFY=FALSE)
       fit <- c(fit, lapply(tmp, function(x) x$fit))
