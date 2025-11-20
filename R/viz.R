@@ -867,7 +867,7 @@ plot.dot <- function(dat, x="odds.ratio", y="gene.set", color="padj", size="over
 }
 
 
-thm <- function(thm="classic", x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA,
+thm <- function(th="classic", x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA,
   grid=NA, grid.min=NA, grid.all=NA, grid.x=NA, grid.x.min=NA, grid.y=NA, grid.y.min=NA,
   str.txt=NA, str.txt.x=NA, str.txt.y=NA, str.bg=NA, str.bg.x=NA, str.bg.y=NA,
   lgd=c(NA,"no","r","b","l","t","in"), lgd.dir=c(NA,"v","h"), lgd.box=c(NA,"v","h"),
@@ -906,20 +906,21 @@ thm <- function(thm="classic", x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA,
     panel.grid.major.y=f(grid.y, "l"), panel.grid.minor.y=f(grid.y.min, "l"),
     strip.text=f(str.txt), strip.text.x=f(str.txt.x), strip.text.x.top=f(str.txt.x), strip.text.x.bottom=f(str.txt.x),
     strip.text.y=f(str.txt.y), strip.text.y.left=f(str.txt.y), strip.text.y.right=f(str.txt.y),
-    strip.background=f(str.bg), strip.background.x=f(str.bg.x), strip.background.y=f(str.bg.y),
+    strip.background=f(str.bg, "r"), strip.background.x=f(str.bg.x, "r"), strip.background.y=f(str.bg.y, "r"),
     legend.position=f(lgd), legend.direction=f(lgd.dir), legend.title=f(lgd.tit), legend.text=f(lgd.txt), legend.key.size=f(lgd.key, "u"), legend.box=f(lgd.box), legend.box.margin=f(lgd.mgn, "u"),
     plot.margin=f(plt.mgn, "u"),
     ...
   )
 
   pars <- pars[!sapply(pars, is.null)]
-  thms <- do.call(ggplot2::theme, pars)
-  if (!is.null(thm)) {
-    thm <- paste0("theme_", thm)
-    thm <- tryCatch(getFromNamespace(thm, ns="ggplot2"), error=function(e) get(thm))
-    thms <- thm + thms
+  res <- do.call(ggplot2::theme, pars)
+  if (!is.null(th)) {
+    th <- paste0("theme_", th)
+    th <- tryCatch(getFromNamespace(th, ns="ggplot2"), error=function(e) get(th))
+    th <- th()
+    res <- th + res
   }
-  thms
+  res
 }
 
 
