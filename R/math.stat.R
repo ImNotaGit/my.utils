@@ -475,7 +475,7 @@ enrich.combo.sets <- function(fg1, fg2, refs1, refs2, bg1, bg2, nc=1L, overlap.c
   # simple: use fisher.simple() for p value, and simple approximate the odds ratio as ad/bc in the 2x2 table
 
   for (pkg in c("doParallel", "foreach")) {
-    if (!require(pkg, quietly=TRUE)) {
+    if (!require(pkg, character.only=TRUE, quietly=TRUE)) {
       stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
     }
   }
@@ -541,7 +541,7 @@ enrich.combo.sets2 <- function(fg1, fg2, refs1, refs2=refs1, bg1, bg2, nc=1L, ov
   # simple: use fisher.simple() for p value, and simple approximate the odds ratio as ad/bc in the 2x2 table
 
   for (pkg in c("doParallel", "foreach")) {
-    if (!require(pkg, quietly=TRUE)) {
+    if (!require(pkg, character.only=TRUE, quietly=TRUE)) {
       stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
     }
   }
@@ -808,7 +808,7 @@ run.multinom <- function(dat, model = y ~ x*z, design=NULL, y=NULL, family=binom
 
   # these packages were imported but not attached; attach it if this function is called
   for (pkg in c("nnet", "lmtest")) {
-    if (!require(pkg, quietly=TRUE)) {
+    if (!require(pkg, character.only=TRUE, quietly=TRUE)) {
       stop(sprintf("Package \"%s\" needed for this function to work.", pkg))
     }
   }
