@@ -1572,7 +1572,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   }
 }
 
-plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, txt="xy", x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, ...) {
+plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, txt="xy", x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r", "none"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, ...) {
   # plot heatmap (or dot plot) with ComplexHeatmap
   # mat: for heatmap color; smat: for dot size, if provided will do dot plot; will assume that mat and smat have the same dimensions and row/column orders
   # sp: if TRUE, will assume that smat contains adjusted P values; can provide significance cutoff in s.seps, e.g. s.seps=0.05
@@ -1602,9 +1602,9 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
   if (is.null(merge.lgd)) merge.lgd <- lgd.pos==anno.lgd.pos
   if (lgd.ori=="default") lgd.ori <- switch(lgd.pos, b="horizontal", r="vertical") else lgd.ori <- switch(lgd.ori, h="horizontal", v="vertical")
   if (anno.lgd.ori=="default") anno.lgd.ori <- switch(anno.lgd.pos, b="horizontal", r="vertical") else anno.lgd.ori <- switch(anno.lgd.ori, h="horizontal", v="vertical")
-  lgd.key.nr <- switch(anno.lgd.pos, b=NULL, r=lgd.key.nmax)
-  lgd.key.nc <- switch(anno.lgd.pos, b=lgd.key.nmax, r=NULL)
-  pos.map <- c(t="top", r="right", b="bottom", l="left")
+  lgd.key.nr <- switch(anno.lgd.pos, b=NULL, r=lgd.key.nmax, none=NULL)
+  lgd.key.nc <- switch(anno.lgd.pos, b=lgd.key.nmax, r=NULL, none=NULL)
+  pos.map <- c(t="top", r="right", b="bottom", l="left", none="none")
   lgd.pos <- pos.map[lgd.pos]
   anno.lgd.pos <- pos.map[anno.lgd.pos]
 
@@ -1667,6 +1667,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
       which="row", df=y.anno, col=row.cols, na_col="white",
       simple_anno_size=grid::unit(2.5,"mm"), gap=grid::unit(2,"points"),
       show_annotation_name=TRUE, annotation_name_side=if (is.null(x.anno)) "bottom" else "top", annotation_name_gp=grid::gpar(fontsize=9, fontface="plain", srt=40), annotation_name_rot=40,
+      show_legend=anno.lgd.pos!="none",
       annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=grid::unit(3, "mm"), grid_height=grid::unit(3, "mm"), title_gp=grid::gpar(fontsize=9, fontface="plain"), labels_gp=grid::gpar(fontsize=8, fontface="plain"))
     )
   } else row.ha <- NULL
@@ -1678,6 +1679,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
       which="column", df=x.anno, col=col.cols, na_col="white",
       simple_anno_size=grid::unit(2.5,"mm"), gap=grid::unit(2,"points"),
       show_annotation_name=TRUE, annotation_name_side="left", annotation_name_gp=grid::gpar(fontsize=9, fontface="plain"),
+      show_legend=anno.lgd.pos!="none",
       annotation_legend_param=list(direction=anno.lgd.ori, nrow=lgd.key.nr, ncol=lgd.key.nc, by_row=anno.lgd.ori=="horizontal", grid_width=grid::unit(3, "mm"), grid_height=grid::unit(3, "mm"), title_gp=grid::gpar(fontsize=9, fontface="plain"), labels_gp=grid::gpar(fontsize=8, fontface="plain"))
     )
   } else col.ha <- NULL
@@ -1761,8 +1763,8 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
     }
     lgd.s <- ComplexHeatmap::Legend(title=sname, title_gp=grid::gpar(fontsize=9, fontface="plain"), labels=lbs, labels_gp=grid::gpar(fontsize=8, fontface="plain"), graphics=grs, nrow=switch(lgd.ori, horizontal=1, vertical=NULL), ncol=switch(lgd.ori, horizontal=NULL, vertical=1), by_row=lgd.ori=="horizontal", direction=lgd.ori)
     lgd <- ComplexHeatmap::packLegend(lgd.c, lgd.s, direction=pack.lgd)
-    ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
-  } else ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=anno.lgd.pos, legend_grouping="original")
+    ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
+  } else ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original")
 }
 
 
