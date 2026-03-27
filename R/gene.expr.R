@@ -899,14 +899,15 @@ de.glmgampoi <- function(dat, pheno, model=~., design, coef, contrast, reduced.m
 }
 
 
-de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, thres=FALSE, coef, contrast, reduced.model, lfc.cutoff=0, pos.only=FALSE, lfc.only=FALSE, nc=1L, keep.fit=FALSE, ...) {
+de.mast <- function(dat, pheno, gns, model=~., design, cdr=TRUE, thres=FALSE, coef, contrast, reduced.model, lfc.cutoff=0, pos.only=FALSE, lfc.only=FALSE, nc=1L, keep.fit=FALSE, ...) {
   # differential expression analysis with MAST, used for e.g. single-cell RNA-seq data
-  # dat: gene-by-sample expression matrix (assuming sparse) of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames
-  # pheno: phenotypic data as a data.table with the same order of samples
+  # dat: gene-by-sample expression matrix (assuming sparse) of log-normalized expression value, with gene ID/symbol as rownames and sample ID/barcode as colnames, or a Seurat object, then will take the `data` slot from its `RNA` assay
+  # pheno: phenotypic data as a data.table with the same order of samples; when `dat` is a Seurat object, will automatically take its `meta.data`
+  # gns: if provided, the subset of genes to use
   # model: the model to use for DE, by default a linear model containing all variables in pheno (w/o interaction terms)
   # pheno and model will be used to compute the design matrix; or provide design matrix in design; pheno and design cannot both be missing; the design matrix should have proper column names
   # to specify a mixed effect model, need to provide pheno and model; design can only be used to specify common fixed effect models
-  # cdr: whether to include cellular detection rate (i.e. fraction of >0 genes in each cell) as a covariate; if TRUE, CDR will be computed as the fraction of >0 values in each column of `dat`
+  # cdr: whether to include cellular detection rate as a covariate; if TRUE, CDR will be computed as the fraction of >0 values in each column of `dat` (before subsetting for any `gns`); or a single cutoff value if not 0; or provide a vector of CDR values across the cells
   # thres: not sure whether and how this works yet -- whether to perform adaptive thresholding (see MAST vignette "Using MAST with RNASeq"); if TRUE, will apply the automatic thresholds; or provide custom thresholds
   # coef, contrast and reduced.model are different ways to specify the model coefficients or comparisons for which to test DE and return results, any combination of these can be provided, with each can be provided as single items or lists of items (named lists recommended) for multiple tests; these specifications will be combined in the order of coef, reduced.model, and contrast (with the orders within each kept the same as the input if multiple items were provided), and list of DE result tables in the corresponding order will be returned; if none of these three is provided, will return results for all coefficients in the model; see below for details;
   # coef: character vector of model coefficients (corresponding to columns of design matrix); if length>1, will return p values for the LR test for dropping all of the provided coefs, in this case the logFC returned probably won't be very meaningful; for multiple tests, provide a list of such items;
@@ -927,7 +928,19 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, thres=FALSE, coef, c
     stop("Package \"MAST\" (GitHub fork: ImNotaGit/MAST) needed for this function to work.")
   }
 
-  if (!(missing(pheno) || is.null(pheno))) {
+  if ("Seurat" %in% class(dat)) {
+    if (!require("Seurat", quietly=TRUE)) {
+      stop("Packages \"Seurat\" needed for this function to work.")
+    }
+    if (identical(Seurat::GetAssayData(dat, assay="RNA", slot="data"), Seurat::GetAssayData(dat, assay="RNA", slot="counts"))) {
+      message("dat$RNA is not normalized, will normalize data.\n")
+      dat <- Seurat::NormalizeData(dat, assay="RNA")
+    }
+    pheno <- as.data.table(dat@meta.data)
+    dat <- Seurat::GetAssayData(dat, assay="RNA", slot="data")
+  }
+
+  if ((missing(design) || is.null(design)) && !(missing(pheno) || is.null(pheno))) {
     pheno <- as.data.table(pheno)
     vs <- all.vars(model)
     if ("." %in% vs) vs <- unique(c(setdiff(vs, "."), names(pheno))) # this is different from the other de.* functions as MAST supports mixed effect models
@@ -944,8 +957,15 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, thres=FALSE, coef, c
       message("They are converted to factors.")
       pheno[, c(vs[tmp]):=lapply(.SD, factor), .SDcols=vs[tmp]]
     }
-    if (cdr) {
+    if (isTRUE(cdr)) {
       pheno <- cbind(pheno, cdr_=Matrix::colMeans(dat>0))
+      model <- update(model, ~.+cdr_)
+    } else if (is.numeric(cdr)) {
+      if (length(cdr)==1) {
+        pheno <- cbind(pheno, cdr_=Matrix::colMeans(dat>cdr))
+      } else if (length(cdr)==ncol(dat)) {
+        pheno <- cbind(pheno, cdr_=cdr)
+      }
       model <- update(model, ~.+cdr_)
     }
     cdat <- pheno
@@ -956,12 +976,27 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, thres=FALSE, coef, c
       message("Both `pheno` with `model` and `design` are provided, will use `design`, instead of creating design matrix from `pheno` with `model`")
     }
     colnames(design) <- make.names(colnames(design))
-    if (cdr) design <- cbind(design, cdr_=Matrix::colMeans(dat>0))
+    if (isTRUE(cdr)) {
+      design <- cbind(design, cdr_=Matrix::colMeans(dat>0))
+    } else if (is.numeric(cdr)) {
+      if (length(cdr)==1) {
+        design <- cbind(design, cdr_=Matrix::colMeans(dat>cdr))
+      } else if (length(cdr)==ncol(dat)) {
+        design <- cbind(design, cdr_=cdr)
+      }
+    }
     #model <- ~.+0 # doesn't work
     model <- as.formula(sprintf("~ %s + 0", paste(sprintf("`%s`", colnames(design)), collapse=" + ")))
     cdat <- design
     ccs <- rep(TRUE, nrow(design))
   } else if (missing(pheno) || is.null(pheno)) stop("Need to provide either `pheno` with `model`, or `design`.")
+
+  if (!missing(gns)) {
+    tmp <- gns %in% rownames(dat)
+    if (!any(tmp)) stop("None of the given genes is in `dat`.\n")
+    if (sum(!tmp)>0) message(sprintf("These genes below are not in `dat`:\n%s", paste(gns[!tmp], collapse=", ")))
+    dat <- dat[gns[tmp], , drop=FALSE]
+  }
 
   sca <- MAST::FromMatrix(exprsArray=as.matrix(dat),
     cData=cbind(data.frame(wellKey=colnames(dat), row.names=colnames(dat)), cdat),
@@ -973,7 +1008,8 @@ de.mast <- function(dat, pheno, model=~., design, cdr=TRUE, thres=FALSE, coef, c
     MAST::assays(sca, withDimnames=FALSE) <- c(MAST::assays(sca), list(thresh=thres$counts_threshold))
   }
   
-  nc.bak <- options("mc.cores")$mc.cores
+  nc.bak <- getOption("mc.cores")
+  on.exit(options(mc.cores=nc.bak))
   if (nc>1) options(mc.cores=nc)
   zlm.fit <- MAST::zlm(formula=model, sca=sca, parallel=isTRUE(nc>1), ...)
   
