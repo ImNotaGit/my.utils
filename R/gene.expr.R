@@ -1033,7 +1033,7 @@ de.mast <- function(dat, pheno, gns, model=~., design, cdr=TRUE, thres=FALSE, co
   if (!(missing(reduced.model) || is.null(reduced.model))) {
     if (!is.list(reduced.model)) reduced.model <- list(reduced.model)
     if (is.null(names(reduced.model))) names(reduced.model) <- sapply(1:length(reduced.model), function(i) if (class(reduced.model[[i]])=="formula") deparse(reduced.model[[i]]) else if (is.matrix(reduced.model[[i]])) paste0("reduced_model",i) else paste0("keep:",paste(reduced.model[[i]],collapse=";"))) else named <- TRUE
-    tmp <- lapply(reduced.model, function(x) {
+    tmp <- lapply(reduced.model, function(x, pheno) {
       if (class(x)=="formula") {
         if (missing(pheno) || is.null(pheno)) stop("`reduced.model` is provided as formula but `pheno` is missing, cannot form the design matrix for reduced model.")
         setdiff(colnames(design), make.names(colnames(model.matrix(x, pheno)))) # only supports fixed effect models
@@ -1044,7 +1044,7 @@ de.mast <- function(dat, pheno, gns, model=~., design, cdr=TRUE, thres=FALSE, co
       } else if (is.numeric(x)) {
         colnames(design)[-x]
       } else stop("Invalid `reduced.model`, should be a single or a list of formulae or numeric/character vectors.")
-    })
+    }, pheno=pheno)
     coef <- c(coef, tmp)
   }
 
