@@ -1572,7 +1572,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   }
 }
 
-plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, txt="xy", x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r", "none"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, ...) {
+plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, txt="xy", x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r", "none"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, do.plot=TRUE, ...) {
   # plot heatmap (or dot plot) with ComplexHeatmap
   # mat: for heatmap color; smat: for dot size, if provided will do dot plot; will assume that mat and smat have the same dimensions and row/column orders
   # sp: if TRUE, will assume that smat contains adjusted P values; can provide significance cutoff in s.seps, e.g. s.seps=0.05
@@ -1589,6 +1589,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
   # x.clust, y.clust: provide hclust or dendrogram objects if want to customize clustering
   # dend.pos: dendrogram side; to hide row/column dendrogram, omit the corresponding side
   # w, h: width and height per heatmap cell in mm; set to NULL to get default behavior
+  # do.plot: if FALSE, will return heatmap components for further customizing rather than plotting
 
   if (!requireNamespace("ComplexHeatmap", quietly=TRUE)) {
     stop("Package \"ComplexHeatmap\" needed for this function to work.")
@@ -1763,17 +1764,28 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
     }
     lgd.s <- ComplexHeatmap::Legend(title=sname, title_gp=grid::gpar(fontsize=9, fontface="plain"), labels=lbs, labels_gp=grid::gpar(fontsize=8, fontface="plain"), graphics=grs, nrow=switch(lgd.ori, horizontal=1, vertical=NULL), ncol=switch(lgd.ori, horizontal=NULL, vertical=1), by_row=lgd.ori=="horizontal", direction=lgd.ori)
     lgd <- ComplexHeatmap::packLegend(lgd.c, lgd.s, direction=pack.lgd)
-    ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
-  } else ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original")
+    if (!do.plot) {
+      return(list(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos))
+    } else {
+      ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
+    }
+  } else {
+    if (!do.plot) {
+      return(list(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original"))
+    } else {
+      ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original")
+    }
+  }
 }
 
 
-sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, t1=NULL, f2=mean, t2=NULL, expr.cutoff=0, ncells.cutoff=3, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab, flip=TRUE, cols=NULL, pal=1, m3d=FALSE, ...) {
+sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f1=mean, t1=NULL, f2=mean, t2=NULL, expr.cutoff=0, ncells.cutoff=3, grps=NULL, gene.anno=NULL, markers=NULL, flag=FALSE, grp.map=NULL, markers.wl=NULL, grp.anno=NULL, xlab, flip=TRUE, cols=NULL, pal=1, m3d=FALSE, ...) {
   # dotplot with ComplexHeatmap for single-cell gene expression data
   # dat, gns, mdat, grp, blk, exp, f1, t1, f2, t2, expr.cutoff, ncells.cutoff: passed to `summ.expr.by.grp`
   # if gns is NULL and `markers` is provided, will automatically set gns to unique(unlist(markers))
   # std: whether to plot the standardized (i.e. scaled) expression values across groups; if TRUE and `t1` and `t2` are not specified, will automatically set `t1` or `t2` to `scale` as appropriate depending on whether `blk` is given; if at least one of `t1` and `t2` is given, the transformation will be determined by `t1` and `t2`
   # independently, `std` will also have effect on the dot color scheme (3-color or 2-color) and label_names
+  # grps: if not NULL, can provide the specific grp order, when used together with `clust` for plot.hm, can allow for custom group order in the plot
   # gene.anno: a data.frame or data.table of gene annotation, first column should contain gene symbols/names
   # grp.anno: similar to gene.anno, group annotation, first column should contain group names
   # markers: a list of marker gene annotation, e.g. list(CD8T=c("CD8A", "CD8B")), if provided will add to gene.anno
@@ -1803,6 +1815,12 @@ sc.dotplot <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE, f
   if (any(!idx)) message(sprintf("These genes have NA values across all groups, they will be excluded:\n%s", paste(rownames(avg)[!idx], collapse=", ")))
   avg <- avg[idx, , drop=FALSE]
   pct <- pct[idx, , drop=FALSE]
+  # group order
+  if (!is.null(grps)) {
+    grps <- grps[grps %in% colnames(avg)]
+    avg <- avg[, grps, drop=FALSE]
+    pct <- pct[, grps, drop=FALSE]
+  }
   # add group sizes (cell and block/sample numbers) to group names
   grps <- colnames(avg)
   if (!is.null(blk)) {
