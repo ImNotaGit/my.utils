@@ -1572,12 +1572,14 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   }
 }
 
-plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, txt="xy", x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r", "none"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, do.plot=TRUE, ...) {
+plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, xlab.par=10, ylab.par=10, tit.par=12, txt="xy", x.txt.par=9, y.txt.par=9, x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r", "none"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, do.plot=TRUE, ...) {
   # plot heatmap (or dot plot) with ComplexHeatmap
   # mat: for heatmap color; smat: for dot size, if provided will do dot plot; will assume that mat and smat have the same dimensions and row/column orders
   # sp: if TRUE, will assume that smat contains adjusted P values; can provide significance cutoff in s.seps, e.g. s.seps=0.05
   # name and sname are legend labels for mat and smat respectively
+  # notes on xlab/ylab: when passing x.grp/y.grp for grouping/splitting, these are used for group label; with the default character(0), default group label will be used; to not label the groups, pass NULL to xlab/ylab
   # txt: "xy" show both column and row names (texts)
+  # xlab.par, ylab.par, tit.par, x.txt.par, y.txt.par: if a single number, treat as fontsize; otherwise, pass a list for grid::gpar()
   # x.anno and y.anno: data.frame or data.table, first column should contain IDs (i.e. col/rownames of mat), each subsequent column is a variable used to annotate the columns/rows
   # x.grp and y.grp: vectors or data.frame to specify the groupings of columns and rows (passed to row_split and column_split), respectively; the heatmap will be split into the corresponding groups; if vectors, should have the correct order; if data.frame or data.table, should follow the format of x.anno and y.anno
   # by default if providing x.grp/y.grp but not xlab/ylab, group names will be displayed on the plot; it's possible to hide the group names by setting xlab or ylab to NULL (but then no x/y title can be displayed)
@@ -1608,6 +1610,11 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
   pos.map <- c(t="top", r="right", b="bottom", l="left", none="none")
   lgd.pos <- pos.map[lgd.pos]
   anno.lgd.pos <- pos.map[anno.lgd.pos]
+  if (is.numeric(xlab.par) && length(xlab.par)==1) xlab.par <- list(fontsize=xlab.par)
+  if (is.numeric(ylab.par) && length(ylab.par)==1) ylab.par <- list(fontsize=ylab.par)
+  if (is.numeric(tit.par) && length(tit.par)==1) tit.par <- list(fontsize=tit.par)
+  if (is.numeric(x.txt.par) && length(x.txt.par)==1) x.txt.par <- list(fontsize=x.txt.par)
+  if (is.numeric(y.txt.par) && length(y.txt.par)==1) y.txt.par <- list(fontsize=y.txt.par)
 
   colf <- .fcolor(mat, cols, pal, seps, from0, sym, m3d, cols.m3d, na.col, trans)
 
@@ -1631,7 +1638,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
       if (sp) {
         cellf <- function(j, i, x, y, width, height, fill) {
           grid::grid.rect(x=x, y=y, width=width, height=height, gp=grid::gpar(col=NA, fill=NA))
-          grid::grid.circle(x=x, y=y, r=rf(i, j), gp=grid::gpar(fill=colf(mat[i, j]), col=if (smat[i, j]>s.seps[1]) "black" else NA))
+          grid::grid.circle(x=x, y=y, r=rf(i, j), gp=grid::gpar(fill=colf(mat[i, j]), col=if (!is.na(smat[i, j]) && smat[i, j]>s.seps[1]) "black" else NA))
         }
       } else {
         cellf <- function(j, i, x, y, width, height, fill) {
@@ -1685,10 +1692,10 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
     )
   } else col.ha <- NULL
 
-  if (!is.null(y.grp) && !is.vector(y.grp)) {
+  if (is.data.frame(y.grp)) {
     y.grp <- y.grp[match(rownames(mat), y.grp[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
   }
-  if (!is.null(x.grp) && !is.vector(x.grp)) {
+  if (is.data.frame(x.grp)) {
     x.grp <- x.grp[match(colnames(mat), x.grp[[1]]), -1, drop=FALSE] # drop=FALSE compatible with both data.table and data.frame
   }
 
@@ -1699,10 +1706,10 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
     width=if (!is.null(w)) ncol(mat)*grid::unit(if (any(grepl("\n", colnames(mat)))) 1.4*w else w, "mm") else NULL,
     height=if (!is.null(h)) nrow(mat)*grid::unit(h, "mm") else NULL,
     row_title=ylab,
-    row_title_gp=grid::gpar(fontsize=10),
+    row_title_gp=do.call(grid::gpar, ylab.par),
     row_title_side=pos.map[str_extract(lab.pos, "[lr]")],
     show_row_names=grepl("y", txt),
-    row_names_gp=grid::gpar(fontsize=9),
+    row_names_gp=do.call(grid::gpar, y.txt.par),
     row_names_side=pos.map[str_extract(lab.pos, "[lr]")],
     row_split=y.grp,
     cluster_rows=if (!is.null(y.clust)) y.clust else grepl("y", clust),
@@ -1711,10 +1718,10 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
     row_dend_width=grid::unit(7, "mm"),
     row_dend_gp=grid::gpar(lwd=0.2),
     column_title=xlab,
-    column_title_gp=grid::gpar(fontsize=10),
+    column_title_gp=do.call(grid::gpar, xlab.par),
     column_title_side=pos.map[str_extract(lab.pos, "[tb]")],
     show_column_names=grepl("x", txt),
-    column_names_gp=grid::gpar(fontsize=9),
+    column_names_gp=do.call(grid::gpar, x.txt.par),
     column_names_side=pos.map[str_extract(lab.pos, "[tb]")],
     column_names_rot=40,
     column_split=x.grp,
@@ -1765,15 +1772,15 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
     lgd.s <- ComplexHeatmap::Legend(title=sname, title_gp=grid::gpar(fontsize=9, fontface="plain"), labels=lbs, labels_gp=grid::gpar(fontsize=8, fontface="plain"), graphics=grs, nrow=switch(lgd.ori, horizontal=1, vertical=NULL), ncol=switch(lgd.ori, horizontal=NULL, vertical=1), by_row=lgd.ori=="horizontal", direction=lgd.ori)
     lgd <- ComplexHeatmap::packLegend(lgd.c, lgd.s, direction=pack.lgd)
     if (!do.plot) {
-      return(list(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos))
+      return(list(hm, column_title=tit, column_title_gp=do.call(grid::gpar, tit.par), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos))
     } else {
-      ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
+      ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=do.call(grid::gpar, tit.par), heatmap_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, merge_legend=merge.lgd, annotation_legend_list=lgd, annotation_legend_side=lgd.pos)
     }
   } else {
     if (!do.plot) {
-      return(list(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original"))
+      return(list(hm, column_title=tit, column_title_gp=do.call(grid::gpar, tit.par), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original"))
     } else {
-      ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=grid::gpar(fontsize=12), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original")
+      ComplexHeatmap::draw(hm, column_title=tit, column_title_gp=do.call(grid::gpar, tit.par), heatmap_legend_side=lgd.pos, merge_legend=merge.lgd, annotation_legend_side=if (anno.lgd.pos=="none") "bottom" else anno.lgd.pos, legend_grouping="original")
     }
   }
 }
