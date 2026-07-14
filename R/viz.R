@@ -1572,7 +1572,7 @@ sc.dotplotly <- function(dat, gns=NULL, mdat, grp, blk=NULL, std=TRUE, exp=TRUE,
   }
 }
 
-plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, xlab.par=10, ylab.par=10, tit.par=12, txt="xy", x.txt.par=9, y.txt.par=9, x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r", "none"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, do.plot=TRUE, ...) {
+plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=character(0), ylab=character(0), tit=NULL, xlab.par=10, ylab.par=10, tit.par=12, txt="xy", x.txt.par=9, y.txt.par=9, x.anno=NULL, y.anno=NULL, x.grp=NULL, y.grp=NULL, cols=3, pal=1, seps="s", from0=FALSE, sym=TRUE, m3d=TRUE, cols.m3d=NULL, na.col="grey50", trans=NULL, sizes=c(0.1, 0.55), s.seps="s", s.from0=TRUE, s.sym=FALSE, s.m3d=FALSE, sizes.m3d=NULL, s.trans=NULL, colf.anno=.fcolor1, grid.par=NULL, cellf=NULL, lab.pos="bl", clust="xy", x.clust=NULL, y.clust=NULL, dend.pos="tl", anno.pos="bl", lgd.pos=c("b", "r"), lgd.ori=c("default", "h", "v"), anno.lgd.pos=c("b", "r", "none"), anno.lgd.ori=c("default", "h", "v"), lgd.key.nmax=5, pack.lgd=c("default", "h", "v"), merge.lgd=NULL, w=5, h=5, do.plot=TRUE, ...) {
   # plot heatmap (or dot plot) with ComplexHeatmap
   # mat: for heatmap color; smat: for dot size, if provided will do dot plot; will assume that mat and smat have the same dimensions and row/column orders
   # sp: if TRUE, will assume that smat contains adjusted P values; can provide significance cutoff in s.seps, e.g. s.seps=0.05
@@ -1580,6 +1580,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
   # notes on xlab/ylab: when passing x.grp/y.grp for grouping/splitting, these are used for group label; with the default character(0), default group label will be used; to not label the groups, pass NULL to xlab/ylab
   # txt: "xy" show both column and row names (texts)
   # xlab.par, ylab.par, tit.par, x.txt.par, y.txt.par: if a single number, treat as fontsize; otherwise, pass a list for grid::gpar()
+  # grid.par: cell border, if not NULL and smat is NULL, provide a list for grid::gpar() passed to rect_gp in Heatmap()
   # x.anno and y.anno: data.frame or data.table, first column should contain IDs (i.e. col/rownames of mat), each subsequent column is a variable used to annotate the columns/rows
   # x.grp and y.grp: vectors or data.frame to specify the groupings of columns and rows (passed to row_split and column_split), respectively; the heatmap will be split into the corresponding groups; if vectors, should have the correct order; if data.frame or data.table, should follow the format of x.anno and y.anno
   # by default if providing x.grp/y.grp but not xlab/ylab, group names will be displayed on the plot; it's possible to hide the group names by setting xlab or ylab to NULL (but then no x/y title can be displayed)
@@ -1732,7 +1733,7 @@ plot.hm <- function(mat, smat=NULL, sp=FALSE, name=" ", sname=" ", xlab=characte
     column_dend_gp=grid::gpar(lwd=0.2),
     border=TRUE,
     border_gp=grid::gpar(lwd=0.2),
-    rect_gp=if (is.null(smat)) grid::gpar(col=NA) else grid::gpar(type="none"),
+    rect_gp=if (!is.null(smat)) grid::gpar(type="none") else if (is.null(grid.par)) grid::gpar(col=NA) else do.call(grid::gpar, grid.par),
     cell_fun=cellf,
     left_annotation=if (grepl("l", anno.pos)) row.ha else NULL,
     right_annotation=if (grepl("r", anno.pos)) row.ha else NULL,
