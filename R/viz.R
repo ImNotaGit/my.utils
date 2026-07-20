@@ -586,14 +586,17 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
         xlabs <- tmp[xs]
       } else {
         xlabs <- xs
-        if (scales=="free_y") {
+        if (scales %in% c("free_y", "free")) {
           tmp <- dat[, .(yn=xa(get(yvar), -0.05)), by=c(facet)]
           dat.n <- merge(dat.n, tmp, by=facet)
         } else {
-          dat.n[, yn:=xa(get(yvar), -0.05)]
+          dat.n[, yn:=xa(dat[[yvar]], -0.05)]
         }
         dat.n[, n:=as.character(n)]
-        dat.n[get(xvar)==xs[1], n:=sprintf("n=%s  ", n)]
+        for (i in unique(dat.n[[facet]])) {
+          tmp <- xs[xs %in% dat.n[get(facet)==i, get(xvar)]][1]
+          dat.n[get(facet)==i & get(xvar)==tmp, n:=sprintf("n=%s  ", n)]
+        }
         add.n.facet <- TRUE
       }
     }
@@ -717,7 +720,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     }
     cpsl <- rbindlist(lapply(cpsl, function(x) data.table(comparison=sapply(x, function(xx) paste(xx, collapse=" vs ")))), idcol="lvl")
     # calculate y values for each level
-    if (!is.null(facet) && scales=="free_y") {
+    if (!is.null(facet) && scales %in% c("free_y", "free")) {
       tmp <- dat[, .(ymin=min(get(yvar)[is.finite(get(yvar))]), ymax=max(get(yvar)[is.finite(get(yvar))])), by=c(facet)]
       tmp[, fa:=get(facet)]
     } else {
@@ -751,7 +754,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
 
   p <- ggplot(dat, aes_string(x=xvar, y=yvar)) +
     ggtitle(tit) +
-    scale_x_discrete(labels=xlabs, name=xlab, drop=FALSE)
+    scale_x_discrete(labels=xlabs, name=xlab, drop=scales %in% c("free_x", "free"))
   if (!is.null(facet)) p <- p + facet_wrap(as.formula(sprintf("~%s", facet)), scales=scales, ncol=ncol)
   if (!is.null(paired) && any(c("line","l") %in% geom)) {
     p <- p + geom_line(aes_string(group=paired), color=line.color, size=0.3, alpha=line.alpha)
@@ -812,14 +815,14 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   if (is.null(facet)) {
     p <- p + theme(
       axis.text.x=element_text(angle=40, hjust=1),
-      panel.grid.major.y=element_line(linewidth=0.5),
+      panel.grid.major.y=element_line(color="grey", linewidth=0.3),
       legend.position="none",
       plot.margin=margin(0,0,0,5*max(nchar(xs)-(10+10*(0:(length(xs)-1))),0))
     )
   } else {
     p <- p + theme(
       axis.text.x=element_blank(),
-      panel.grid.major.y=element_line(linewidth=0.5),
+      panel.grid.major.y=element_line(color="grey", linewidth=0.3),
       legend.title=element_blank(),
       legend.position=lgd.pos
     )
