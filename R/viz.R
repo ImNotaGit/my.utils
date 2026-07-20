@@ -240,7 +240,7 @@ plot.pca <- function(mat, pc.x=1, pc.y=2, max.pc=50, data=NULL, color=NULL, shap
     geom_line(aes(group=what)) +
     scale_color_manual(values=c("grey10","darkblue")) +
     theme_classic() +
-    theme(panel.grid.major.y=element_line(size=0.4),
+    theme(panel.grid.major.y=element_line(linewidth=0.4),
           legend.position="none")
 
   dat <- data.frame(x=res$x[, pc.x], y=res$x[, pc.y])
@@ -808,14 +808,14 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   if (is.null(facet)) {
     p <- p + theme(
       axis.text.x=element_text(angle=40, hjust=1),
-      panel.grid.major.y=element_line(size=0.5),
+      panel.grid.major.y=element_line(linewidth=0.5),
       legend.position="none",
       plot.margin=margin(0,0,0,5*max(nchar(xs)-(10+10*(0:(length(xs)-1))),0))
     )
   } else {
     p <- p + theme(
       axis.text.x=element_blank(),
-      panel.grid.major.y=element_line(size=0.5),
+      panel.grid.major.y=element_line(linewidth=0.5),
       legend.title=element_blank(),
       legend.position=lgd.pos
     )
@@ -1023,7 +1023,7 @@ thm <- function(th="classic", x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA,
       axis.ticks.x=if (no.axs) element_blank() else element_line(),
       axis.text.y=if (is.null(xclrs)) element_text() else element_text(color=xclrs[xlvls]),
       axis.title.y=if (is.null(xlab) || dendro) element_blank() else element_text(),
-      panel.grid.major.x=element_line(size=0.2, color="grey50"),
+      panel.grid.major.x=element_line(linewidth=0.2, color="grey50"),
       strip.text=element_text(size=9, margin=margin(0,2,0,2)),
       strip.background=element_rect(size=0.6),
       plot.margin=if (no.nlab) margin(0,0,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)) else margin(10,0,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)),
@@ -1051,7 +1051,7 @@ thm <- function(th="classic", x.tit=NA, x.txt=NA, y.tit=NA, y.txt=NA, tit=NA,
       axis.ticks.y=if (no.axs) element_blank() else element_line(),
       axis.text.x=if (is.null(xclrs)) element_text(angle=ag, hjust=hj, vjust=vj) else element_text(angle=ag, hjust=hj, vjust=vj, color=xclrs[xlvls]),
       axis.title.x=if (is.null(xlab) || dendro) element_blank() else element_text(),
-      panel.grid.major.y=element_line(size=0.2, color="grey50"),
+      panel.grid.major.y=element_line(linewidth=0.2, color="grey50"),
       strip.text=element_text(size=9, margin=margin(2,0,2,0)),
       strip.background=element_rect(size=0.6),
       plot.margin=if (no.nlab) margin(0,0,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)) else margin(0,10,0,5*max(nchar(as.character(xlvls))-(10+10*(0:(length(xlvls)-1))),0)),
