@@ -538,7 +538,7 @@ plot.groups.old <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, g
 }
 
 
-plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, return.jitter=FALSE, ...) {
+plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", tit=NULL, geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, return.jitter=FALSE, ...) {
   # new plot.groups for plotting arbitrary numbers of groups possibly with stratification (facets) and between-group comparison labels
   # dat: data.table
   # xvar, yvar, facet: character; yvar can contain multiple values or can be "." to stand for all other columns in `dat` (for wide-format `dat`), or specify `facet` (for long-format `dat`)
@@ -750,6 +750,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   }
 
   p <- ggplot(dat, aes_string(x=xvar, y=yvar)) +
+    ggtitle(tit) +
     scale_x_discrete(labels=xlabs, name=xlab, drop=FALSE)
   if (!is.null(facet)) p <- p + facet_wrap(as.formula(sprintf("~%s", facet)), scales=scales, ncol=ncol)
   if (!is.null(paired) && any(c("line","l") %in% geom)) {
@@ -801,10 +802,13 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     cps <- str_split(cps, " vs ")
     p <- p + ggsignif::geom_signif(comparisons=cps, test=test, test.args=test.args, textsize=lab.size, step_increase=y.inc, parse=TRUE, ...)
   }
-  p <- p + scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(if (add.n.facet) 0.1 else 0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18))) + theme_classic()
   if (add.n.facet) {
     p <- p + geom_text(data=dat.n, aes_string(x=xvar, y="yn", label="n"), size=lab.size)
   }
+  p <- p +
+    scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(if (add.n.facet) 0.1 else 0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18))) +
+    guides(color=guide_legend(byrow=TRUE)) +
+    theme_classic()
   if (is.null(facet)) {
     p <- p + theme(
       axis.text.x=element_text(angle=40, hjust=1),
