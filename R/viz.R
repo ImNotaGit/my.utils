@@ -61,9 +61,10 @@ subchunkify <- function(p, w, h, nm=NULL, ...) {
 }
 
 
-plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, color=NULL, shape=NULL, size=NULL, label=NULL, label.subset=NULL, label.outliers=FALSE, outliers.cutoff=0.01, label.size=3, alpha=0.8, density="auto", diag=FALSE, trend="lm", cor.method=c("pearson","spearman","kendall"), cor.pos="auto", cor.size=4, do.plot=TRUE) {
+plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, x.trans="identity", y.trans="identity", color=NULL, shape=NULL, size=NULL, label=NULL, label.subset=NULL, label.outliers=FALSE, outliers.cutoff=0.01, label.size=3, alpha=0.8, density="auto", diag=FALSE, trend="lm", cor.method=c("pearson","spearman","kendall"), cor.pos="auto", cor.size=4, do.plot=TRUE) {
   # 2-D scatter plot
   # x, y: numeric vectors of the same size, or column names in dat if dat is not NULL and provided as a data.frame or data.table or matrix
+  # x.trans, y.trans: transformation of x/y axis, passed to scale_x/y_continuous
   # color, shape, size: vectors in the same order as x/y/rows of dat for plotting (can be a named list to customize legend title), or column names in dat if dat is not NULL
   # label: will label the points if this is anything but NULL; this can be a vector of labels in the same order as x/y/rows of dat, or column names in dat if dat is not NULL, or simply TRUE (in which case will use row names of dat, or row indices if there are no row names)
   # label.subset: specify the subset to add labels; a logical or numeric index vector in the same order as label/rows of dat, or a character vector of a subset of labels; will label all points if NULL
@@ -136,14 +137,20 @@ if (is.null(label.subset)) label.subset <- NA
   }
 
   p <- ggplot(dat, aes_string(x=x, y=y)) +
-    xlab(xlab) + ylab(ylab) +
+    scale_x_continuous(name=xlab, transform=x.trans) + scale_y_continuous(name=ylab, transform=y.trans) +
     geom_point(aes_string(color=color, shape=shape, size=size), alpha=alpha) +
     theme_classic()
 
-  if (density=="auto") {
-    dmat <- table(cut(dat[[x]], breaks=5), cut(dat[[y]], breaks=5))
-    density <- sum(dmat>500)>5
+  if (density=="auto" || (length(cor.pos)==1 && cor.pos=="auto")) {
+    x.trans <- scales::as.transform(x.trans)
+    x1 <- x.trans$transform(dat[[x]])
+    y.trans <- scales::as.transform(y.trans)
+    y1 <- y.trans$transform(dat[[y]])
+    tmp <- is.finite(x1) & is.finite(y1)
+    dmat <- table(cut(x1[tmp], breaks=5), cut(y1[tmp], breaks=5))
   }
+
+  if (density=="auto") density <- sum(dmat>500)>5
   if (density==TRUE) p <- p + stat_density_2d(aes(color=..level..), geom="polygon", alpha=0) + theme(legend.position="none")
 
   if ("loess" %in% trend) {
@@ -161,7 +168,6 @@ if (is.null(label.subset)) label.subset <- NA
       r <- ct$estimate
       if (is.na(pval)) lab <- sprintf("%s=%.3f\nP=NA", symb, r) else if (pval>=2.2e-16) lab <- sprintf("%s=%.3f\nP=%.3g", symb, r, pval) else lab <- sprintf("%s=%.3f\nP<2.2e-16", symb, r)
       if (length(cor.pos)==1 && cor.pos=="auto") {
-        if (!exists("dmat")) dmat <- table(cut(dat[[x]], breaks=5), cut(dat[[y]], breaks=5))
         tmp <- which(dmat==min(dmat))
         if (is.na(r) || r>0) tmp1 <- match(c(5,10,4,15,9,3,21,22,16,23,17,11,20,14,8,2,24,18,12,6,25,19,13,7,1), tmp)
         else tmp1 <- match(c(25,20,24,15,19,23,1,2,6,3,7,11,10,14,18,22,4,8,12,16,5,9,13,17,21), tmp)
@@ -169,8 +175,8 @@ if (is.null(label.subset)) label.subset <- NA
         i <- tmp %% 5
         if (i==0) i <- 5
         j <- (tmp-1) %/% 5 + 1
-        cor.pos.x <- (1.1-0.2*i)*min(as.numeric(dat[[x]]),na.rm=TRUE)+(0.2*i-0.1)*max(as.numeric(dat[[x]]),na.rm=TRUE)
-        cor.pos.y <- (1.1-0.2*j)*min(as.numeric(dat[[y]]),na.rm=TRUE)+(0.2*j-0.1)*max(as.numeric(dat[[y]]),na.rm=TRUE)
+        cor.pos.x <- x.trans$inverse(xa(as.numeric(x1), 0.2*i-0.1))
+        cor.pos.y <- y.trans$inverse(xa(as.numeric(y1), 0.2*j-0.1))
         if (lubridate::is.Date(dat[[x]])) cor.pos.x <- as.Date(cor.pos.x, origin="1970-01-01")
         if (lubridate::is.Date(dat[[y]])) cor.pos.y <- as.Date(cor.pos.y, origin="1970-01-01")
       } else {
@@ -334,9 +340,6 @@ plot.roc <- function(dat, col="blue4", rev.lgd=FALSE, lgd.tit="theshold", lab=TR
 
   return(p)
 }
-
-
-xa <- function(x, a) (1-a)*min(x[is.finite(x)]) + a*max(x[is.finite(x)]) # is.finite will ignore Inf, -Inf, NA and NaN
 
 
 cp.groups <- function(..., ylab="Value", geoms=c("box","violin","jitter"), plab=c(12,23,13), rlab=TRUE, lab.size=4, more.args=list()) {
@@ -538,10 +541,12 @@ plot.groups.old <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, g
 }
 
 
-plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", tit=NULL, geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, return.jitter=FALSE, ...) {
+plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", tit=NULL, geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, return.jitter=FALSE, ...) {
   # new plot.groups for plotting arbitrary numbers of groups possibly with stratification (facets) and between-group comparison labels
   # dat: data.table
   # xvar, yvar, facet: character; yvar can contain multiple values or can be "." to stand for all other columns in `dat` (for wide-format `dat`), or specify `facet` (for long-format `dat`)
+  # drop.x.na: whether to include NA in xvar as a separate group
+  # y.trans: y axis transformation, passed to scale_y_continuous
   # geom: "b" (boxplot), "j" (jitter), "v" (violin), "l" (line, only effective if `pair` is not NULL)
   # add.n: whether to add sample size per group; whenever possible this will be added to x labels and legend labels; if there are difference sample sizes across facets, will add the numbers just above the X axis
   # paired: if provided (as a character), then this variable will be used to specify sample pairing, with `geom` including "l" lines will be drawn connecting the paired samples, and for the default test paired test will be used
@@ -555,6 +560,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
   # ...: passed to ggsignif::geom_signif (only used if is.null(dat.cp) && !is.null(cps))
 
   # y variables
+  yvar <- unname(yvar) # just in case
   if (length(yvar)==1 && yvar==".") yvar <- setdiff(names(dat), xvar)
   if (length(yvar)>1) {
     dat <- melt(dat, id.vars=xvar, measure.vars=yvar, variable.name="facet", value.name="y")
@@ -562,15 +568,17 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     yvar <- "y"
   } else dat <- copy(dat)
   # x levels
+  xvar <- unname(xvar) # just in case; may cause issue in data.table operations later
   if (!is.factor(dat[[xvar]])) {
     message("`xvar` in `dat` is not a factor, this may cause issues in ordering of the groups.")
     dat[, c(xvar):=factor(get(xvar))]
   }
   xs <- levels(dat[[xvar]])
-  if (anyNA(dat[[xvar]])) {
+  if (x.na && anyNA(dat[[xvar]])) {
     xs <- c(xs, "NA")
     dat[, c(xvar):=factor(ifelse(is.na(get(xvar)), "NA", as.character(get(xvar))), levels=xs)]
   }
+  facet <- unname(facet) # just in case; may cause issue in data.table operations later
   add.n.facet <- FALSE
   if (add.n) {
     if (is.null(facet)) {
@@ -587,10 +595,10 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
       } else {
         xlabs <- xs
         if (scales %in% c("free_y", "free")) {
-          tmp <- dat[, .(yn=xa(get(yvar), -0.05)), by=c(facet)]
+          tmp <- dat[, .(yn=xa(get(yvar), -0.05, y.trans)), by=c(facet)]
           dat.n <- merge(dat.n, tmp, by=facet)
         } else {
-          dat.n[, yn:=xa(dat[[yvar]], -0.05)]
+          dat.n[, yn:=xa(dat[[yvar]], -0.05, y.trans)]
         }
         dat.n[, n:=as.character(n)]
         for (i in unique(dat.n[[facet]])) {
@@ -726,11 +734,11 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     } else {
       tmp <- dat[, .(ymin=min(get(yvar)[is.finite(get(yvar))]), ymax=max(get(yvar)[is.finite(get(yvar))]), fa=1)]
     }
-    ya <- function(ymin, ymax, a) (1-a)*ymin + a*ymax
     y.inc <- y.inc*length(lab)
     ylv <- rbindlist(lapply(1:uniqueN(cpsl$lvl), function(i) {
       res <- do.call(cbind, lapply(1:length(lab), function(j) {
-        tmp[, .(y=ya(ymin, ymax, 1.05+y.inc*(i-1)+y.inc*0.9*(j-1)/length(lab)))]
+        # y will be for geom_bracket, which sees to operate on the transformed scale (if any), so do not need to transform back to the original scale (i.e. inv=F)
+        tmp[, .(y=xa1(ymin, ymax, 1.05+y.inc*(i-1)+y.inc*0.9*(j-1)/length(lab), y.trans, inv=FALSE))]
       }))
       setnames(res, paste0("y", length(lab):1))
       cbind(res, tmp[, .(fa)])
@@ -809,7 +817,7 @@ plot.groups <- function(dat, xvar, yvar, xlab=xvar, ylab=if (length(yvar)==1) yv
     p <- p + geom_text(data=dat.n, aes_string(x=xvar, y="yn", label="n"), size=lab.size)
   }
   p <- p +
-    scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(if (add.n.facet) 0.1 else 0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18))) +
+    scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(if (add.n.facet) 0.1 else 0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18)), transform=y.trans) +
     guides(color=guide_legend(byrow=TRUE)) +
     theme_classic()
   if (is.null(facet)) {

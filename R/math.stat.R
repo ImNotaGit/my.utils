@@ -2,6 +2,29 @@
 
 is.wholenumber <- function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
 
+log2p <- function(x, p=1) log2(x+p)
+
+log10p <- function(x, p=1) log10(x+p)
+
+xa <- function(x, a, trans="identity", inv=TRUE) {
+  # trans: character, or scales::transform_* object
+  # is.finite will exclude Inf, -Inf, NA and NaN
+  trans <- scales::as.transform(trans)
+  x <- trans$transform(x)
+  x <- x[is.finite(x)]
+  res <- (1-a)*min(x) + a*max(x)
+  if (inv) res <- trans$inverse(res)
+  res
+}
+
+xa1 <- function(xmin, xmax, a, trans="identity", inv=TRUE) {
+  # I write a separate function similar to xa to allow for vectorizing over both xmin and xmax
+  trans <- scales::as.transform(trans)
+  res <- (1-a)*trans$transform(xmin) + a*trans$transform(xmax)
+  if (inv) res <- trans$inverse(res)
+  res
+}
+
 jaccard <- function(a, b) {
   # jaccard index between two sets
   uniqueN(intersect(a, b)) / uniqueN(union(a, b))
@@ -648,10 +671,10 @@ run.wilcox <- function(dat, model, cps=".", ...) {
     if (length(cps)==0) stop("There is only one group.")
     if (any(!unlist(cps) %in% grps)) warning("Some of the groups specified in `cps` are not in `dat`.")
     if (is.null(pvar)) {
-      res <- rbindlist(lapply(cps, function(x) dat[, wilcox(get(yvar)[get(xvar)==x[2]], get(yvar)[get(xvar)==x[1]], ...)]), idcol="comparison")
+      res <- rbindlist(lapply(cps, function(x_) dat[, wilcox(get(yvar)[get(xvar)==x_[2]], get(yvar)[get(xvar)==x_[1]], ...)]), idcol="comparison")
     } else {
       dat <- dcast(dat, as.formula(sprintf("%s~%s", pvar, xvar)), value.var=yvar)
-      res <- rbindlist(lapply(cps, function(x) wilcox(dat[[x[2]]], dat[[x[1]]], paired=TRUE, ...)), idcol="comparison")
+      res <- rbindlist(lapply(cps, function(x_) wilcox(dat[[x_[2]]], dat[[x_[1]]], paired=TRUE, ...)), idcol="comparison")
     }
     res[, padj:=p.adjust(pval, "BH")]
     res[]
