@@ -541,7 +541,7 @@ plot.groups.old <- function(dat, xvar, yvar, xlab=xvar, ylab=yvar, facet=NULL, g
 }
 
 
-plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", tit=NULL, geom=c("b", "j", "l"), add.n=TRUE, col=xvar, fill=NA, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, return.jitter=FALSE, ...) {
+plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xvar, ylab=if (length(yvar)==1) yvar else "Value", tit=NULL, geom="bjl", add.n=TRUE, col=xvar, fill=xvar, pal="Set1", paired=NULL, facet=NULL, scales="free_y", ncol=5, cps=NULL, test="default", test.args=NULL, dat.cp=NULL, readj.pval=TRUE, lab="default", lab1=NULL, lab.subset=NULL, flag="padj<0.1", lab.size=2.8, y.inc=0.28, lgd.pos="bottom", line.color="grey20", line.alpha=0.2, return.jitter=FALSE, ...) {
   # new plot.groups for plotting arbitrary numbers of groups possibly with stratification (facets) and between-group comparison labels
   # dat: data.table
   # xvar, yvar, facet: character; yvar can contain multiple values or can be "." to stand for all other columns in `dat` (for wide-format `dat`), or specify `facet` (for long-format `dat`)
@@ -764,11 +764,11 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
     ggtitle(tit) +
     scale_x_discrete(labels=xlabs, name=xlab, drop=scales %in% c("free_x", "free"))
   if (!is.null(facet)) p <- p + facet_wrap(as.formula(sprintf("~%s", facet)), scales=scales, ncol=ncol)
-  if (!is.null(paired) && any(c("line","l") %in% geom)) {
+  if (!is.null(paired) && grepl("l", geom)) {
     p <- p + geom_line(aes_string(group=paired), color=line.color, size=0.3, alpha=line.alpha)
   }
-  if (any(c("jitter","j") %in% geom)) {
-    if (any(c("violin","v","box","b") %in% geom)) {
+  if (grepl("j", geom)) {
+    if (grepl("v|b", geom)) {
       jitter <- position_jitter(width=0.15, height=0, seed=1)
       p <- p + geom_point(aes_string(color=col), position=jitter, size=0.8, alpha=0.4)
     } else {
@@ -778,27 +778,28 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
         stat_summary(aes_string(color=col), fun.data=mean_se, geom="pointrange") # plot a line with central dot for mean+/-se
     }
   }
-  if (any(c("violin","v") %in% geom)) {
-    if (any(c("box","b") %in% geom)) {
+  if (grepl("v", geom)) {
+    if (grepl("b", geom)) {
       p <- p + geom_violin(aes_string(color=col), scale="width", width=0.7, alpha=0)
     } else {
       p <- p + geom_violin(aes_string(color=col, fill=fill), scale="width", width=0.7, alpha=0.3)
     }
   }
-  if (any(c("box","b") %in% geom)) {
-    p <- p + geom_boxplot(aes_string(color=col), width=if (any(c("violin","v") %in% geom)) 0.3 else 0.6, size=0.8, alpha=0, outlier.size=if (any(c("jitter","j") %in% geom)) 0 else 0.8)
+  if (grepl("b", goem)) {
+    p <- p + geom_boxplot(aes_string(color=col), width=if (grepl("v", geom)) 0.3 else 0.6, size=0.8, alpha=0, outlier.size=if (grepl("j", geom)) 0 else 0.8)
   }
   if (is.character(pal)) {
     if (length(pal)==1) {
       p <- p +
-        { if (!is.na(col) && col==xvar) scale_color_brewer(labels=xlabs, palette=pal) else scale_color_brewer(palette=pal) } +
-        { if (!is.na(fill) && fill==xvar) scale_fill_brewer(labels=xlabs, palette=pal) else scale_fill_brewer(palette=pal) }
+        { if (!is.null(col) && !is.na(col) && col==xvar) scale_color_brewer(labels=xlabs, palette=pal) else scale_color_brewer(palette=pal) } +
+        { if (!is.null(fill) && !is.na(fill) && fill==xvar) scale_fill_brewer(labels=xlabs, palette=pal) else scale_fill_brewer(palette=pal) }
     } else {
       p <- p +
-        { if (!is.na(col) && col==xvar) scale_color_manual(labels=xlabs, values=pal) else scale_color_manual(values=pal) } +
-        { if (!is.na(fill) && fill==xvar) scale_fill_manual(labels=xlabs, values=pal) else scale_fill_manual(values=pal) }
+        { if (!is.null(col) && !is.na(col) && col==xvar) scale_color_manual(labels=xlabs, values=pal) else scale_color_manual(values=pal) } +
+        { if (!is.null(fill) && !is.na(fill) && fill==xvar) scale_fill_manual(labels=xlabs, values=pal) else scale_fill_manual(values=pal) }
     }
   } else p <- p + pal
+  p <- p + guides(color=guide_legend(byrow=TRUE))
   if (!is.null(dat.cp) && nrow(dat.cp)>0) {
     if (isTRUE(flag)) p <- p + ggnewscale::new_scale_color()
     for (i in 1:length(lab)) {
@@ -818,7 +819,6 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
   }
   p <- p +
     scale_y_continuous(name=ylab, labels=function(x) sprintf("%.2g", x), expand=expansion(mult=c(if (add.n.facet) 0.1 else 0.05, if (is.null(cps) && (is.null(dat.cp) || nrow(dat.cp)>0)) 0.05 else 0.18)), transform=y.trans) +
-    guides(color=guide_legend(byrow=TRUE)) +
     theme_classic()
   if (is.null(facet)) {
     p <- p + theme(
@@ -835,7 +835,7 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
       legend.position=lgd.pos
     )
   }
-  if (return.jitter && any(c("jitter","j") %in% geom)) return(list(p=p, jitter=jitter))
+  if (return.jitter && grepl("j", geom)) return(list(p=p, jitter=jitter))
   p
 }
 
