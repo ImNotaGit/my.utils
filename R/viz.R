@@ -785,7 +785,7 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
       p <- p + geom_violin(aes_string(color=col, fill=fill), scale="width", width=0.7, alpha=0.3)
     }
   }
-  if (grepl("b", goem)) {
+  if (grepl("b", geom)) {
     p <- p + geom_boxplot(aes_string(color=col), width=if (grepl("v", geom)) 0.3 else 0.6, size=0.8, alpha=0, outlier.size=if (grepl("j", geom)) 0 else 0.8)
   }
   if (is.character(pal)) {
