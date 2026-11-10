@@ -1,7 +1,7 @@
 ## ----functions for quick data exploration and visualization----
 
 
-my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE, mute=FALSE, l=50, c=100) {
+my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE, no.light=FALSE, mute=FALSE, l=50, c=100) {
   # my custom list of easily distinguishable colors for categorical variables with potentially many levels
   # note: order not optimized yet
   # x: if missing, will return all available colors; or a single number n, return n colors from top of the list;
@@ -19,6 +19,10 @@ my.cols <- function(x, dup.last=FALSE, na.rm=TRUE, na.color=NULL, no.grey=FALSE,
     cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#66CD00", "#FF7D7D", "#AB82FF", "#D2B48C", "#ADFF2F", "#CD853F", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#FF4500", "#121212", "#CD96CD", "#7EC0EE")
   } else {
     cols <- c("#E31A1C", "#295ED4", "#008B00", "#6A3D9A", "#FFFF00", "#FFACFD", "#00FFFF", "#8B4500", "#FFE4C4", "#00FF7F", "#FF1493", "#FFD700", "#FF7F00", "#DADADA", "#66CD00", "#FF7D7D", "#D2B48C", "#AB82FF", "#667788", "#ADFF2F", "#CD853F", "#333333", "#00008B", "#B03060", "#9400D3", "#8B8B00", "#528B8B", "#FF4500", "#121212", "#CD96CD", "#7EC0EE")
+  }
+  if (no.light) {
+    # this is to avoid light colors which have low contrast on a white background
+    cols <- cols[!cols %in% c("#FFFF00", "#FFE4C4", "#DADADA")]
   }
 
   if (missing(x)) return(cols)
@@ -553,7 +557,7 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
   # cps: character vector, between-group comparisons to label, each element should have format "groupA vs groupB", or can be "." for all possible pairs of comparisons (un-ordered)
   # dat.cp: data.table (with a column named "comparison", in the same format as `cps`) or list of data.tables (with names of the list in the same format as `cps`), the `facet` variable should be present (when `yvar` contains multiple values, will create the `facet` variable named "facet", in this case a column named "facet" should be present in dat.cp), otherwise will look for a column named "id" and use it as the facet variable
   # when `dat.cp` is NULL and `cps` is not, will compare the groups in `cps` and add the results as labels; by default (`test`="default") comparing using wilcoxon tests (`run.wilcox`); if `dat.cp` is given will use it for labeling regardelss of `cps`, but `cps` can be used to specify a subset to label, and if `cps` is not given will use all results in `dat.cp` that is compatible with `dat`
-  # lab, lab1: glue::glue formatting strings with latex formatting support, these format `dat.cp` columns to get the labels, if `lab1` is given, will use it for the top label and use `lab` for all the rest labels; can contain shorthand "f(x, fmt)" which is equivalent to sprintf(fmt, x); e.g. "P_{{adj}}={f(padj, '%.2g')}"; use "\n" for new line; "default" is coef/log.fc and Padj, or can be the shorthands "coef", "log.fc", "pval", "padj"
+  # lab, lab1: glue::glue formatting strings with latex formatting support, these format `dat.cp` columns to get the labels, if `lab1` is given, will use it for the top label and use `lab` for all the rest labels; can contain shorthand "f(x, fmt)" which is equivalent to sprintf(fmt, x); e.g. "P_{{adj}}={f(padj, '%.2g')}"; use "\n" for new line; "default" is coef/log.fc and padj, "default.pval" is coef/log.fc and pval, or can be the shorthands "coef", "log.fc", "pval", "padj"
   # lab.subset, flag: expression strings for subsetting comparison results; only the `lab.subset` subset will be labeled, among which the `flag` subset will be highlighted in red
   # y.inc: increase in y for each line of label (if `lab` contains multiple lines, this roughly corresponds to the height of each line of label)
   # return.jitter: if TRUE and jitter plot is used, return list(p, jitter)
@@ -633,9 +637,14 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
         dat.cp <- do.call(run.wilcox, c(list(dat=dat, model=as.formula(sprintf("%s ~ %s + %s", yvar, xvar, paired)), cps=cps), test.args))
       }
     }
-    if (length(lab)==1 && lab=="default") {
-      lab <- "{f(r.wilcox, '%.2g')}\n({ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '%.2g'))})"
-      lab1 <- "r_{{rb}}={f(r.wilcox, '%.2g')}\n(P_{{adj}}{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '=%.2g'))})"
+    if (length(lab)==1) {
+      if (lab=="default") {
+        lab <- "{f(r.wilcox, '%.2g')}\n({ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '%.2g'))})"
+        lab1 <- "r_{{rb}}={f(r.wilcox, '%.2g')}\n(P_{{adj}}{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '=%.2g'))})"
+      } else if (lab=="default.pval") {
+        lab <- "{f(r.wilcox, '%.2g')}\n({ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '%.2g'))})"
+        lab1 <- "r_{{rb}}={f(r.wilcox, '%.2g')}\n(P{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '=%.2g'))})"
+      }
     }
   }
   # data of comparison results
@@ -672,6 +681,23 @@ plot.groups <- function(dat, xvar, yvar, x.na=TRUE, y.trans="identity", xlab=xva
             lab1 <- paste0(lab1, "\n(P_{{adj}}{ifelse(padj<2.2e-16, '<2.2e-16', f(padj, '=%.2g'))})")
           }
         } else if ("pval" %in% names(dat.cp)) {
+          if (is.null(lab)) {
+            lab <- "{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '%.2g'))}"
+            lab1 <- "P{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '=%.2g'))}"
+          } else {
+            lab <- paste0(lab, "\n({ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '%.2g'))})")
+            lab1 <- paste0(lab1, "\n(P{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '=%.2g'))})")
+          }
+        }
+      } else if (lab=="default.pval") {
+        if ("coef" %in% names(dat.cp)) {
+          lab <- "{f(coef, '%.2g')}"
+          lab1 <- "Coef={f(coef, '%.2g')}"
+        } else if ("log.fc" %in% names(dat.cp)) {
+          lab <- "{f(log.fc, '%.2g')}"
+          lab1 <- "logFC={f(log.fc, '%.2g')}"
+        } else lab <- lab1 <- NULL
+        if ("pval" %in% names(dat.cp)) {
           if (is.null(lab)) {
             lab <- "{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '%.2g'))}"
             lab1 <- "P{ifelse(pval<2.2e-16, '<2.2e-16', f(pval, '=%.2g'))}"
