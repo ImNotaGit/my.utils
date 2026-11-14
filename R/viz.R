@@ -92,6 +92,7 @@ plot.xy <- function(x, y, dat=NULL, xlab=NULL, ylab=NULL, x.trans="identity", y.
     if (is.null(ids)) ids <- 1:nrow(dat)
     dat <- copy(as.data.table(dat))
   }
+  dat <- dat[is.finite(get(x)) & is.finite(get(y))]
   if (!(length(color)==1 && color %in% names(dat) || is.null(color))) {
     dat[, color:=unlist(color)]
     if (!is.null(names(color))) {
@@ -144,6 +145,11 @@ if (is.null(label.subset)) label.subset <- NA
     scale_x_continuous(name=xlab, transform=x.trans) + scale_y_continuous(name=ylab, transform=y.trans) +
     geom_point(aes_string(color=color, shape=shape, size=size), alpha=alpha) +
     theme_classic()
+  gd.pars <- list()
+  if (uniqueN(dat[[color]])==1) gd.pars$color <- "none"
+  if (uniqueN(dat[[shape]])==1) gd.pars$shape <- "none"
+  if (uniqueN(dat[[size]])==1) gd.pars$size <- "none"
+  p <- p + do.call(guides, gd.pars)
 
   if (density=="auto" || (length(cor.pos)==1 && cor.pos=="auto")) {
     x.trans <- scales::as.transform(x.trans)
